@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+}
+
+// Load secrets from secrets.properties (gitignored). Falls back to empty strings
+// so the project still builds without the file (e.g. in CI without credentials).
+val secretsFile = rootProject.file("app-example/secrets.properties")
+val secrets = Properties().apply {
+    if (secretsFile.exists()) secretsFile.inputStream().use { load(it) }
 }
 
 android {
@@ -15,6 +24,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "DETOUR_API_KEY", "\"${secrets["DETOUR_API_KEY"] ?: ""}\"")
+        buildConfigField("String", "DETOUR_APP_ID", "\"${secrets["DETOUR_APP_ID"] ?: ""}\"")
     }
 
     buildTypes {
@@ -38,6 +50,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 

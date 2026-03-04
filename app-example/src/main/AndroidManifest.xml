@@ -18,15 +18,6 @@
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
-
-      <intent-filter android:autoVerify="true">
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="https" />
-        <data android:host="android-sdk.godetour.link" />
-        <data android:pathPrefix="/nkeFLNfFBf" />
-      </intent-filter>
     </activity>
 
     <activity
@@ -36,6 +27,11 @@
 
     <activity
       android:name=".PromoActivity"
+      android:exported="false"
+      android:theme="@style/Theme.DetourAndroidSDK" />
+
+    <activity
+      android:name=".DeferredOnlyExampleActivity"
       android:exported="false"
       android:theme="@style/Theme.DetourAndroidSDK" />
   </application>

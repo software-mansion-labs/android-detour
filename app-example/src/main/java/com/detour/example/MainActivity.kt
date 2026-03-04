@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.detour.example.BuildConfig
 import com.detour.example.databinding.ActivityMainBinding
 import com.detour.example.storage.EncryptedStorageProvider
 import com.detour.sdk.Detour
@@ -14,18 +15,27 @@ import com.detour.sdk.models.LinkProcessingMode
 import com.detour.sdk.models.LinkResult
 import com.detour.sdk.models.LinkType
 
+/**
+ * Main example: DetourDelegate + ALL mode.
+ *
+ * Handles Universal Links, custom scheme links, AND deferred links automatically.
+ * This is the recommended setup for most apps.
+ */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    // DetourDelegate handles all link logic automatically.
-    // Using EncryptedStorageProvider for secure storage and ALL mode for full link handling.
     private val detourDelegate = DetourDelegate(
         lifecycleOwner = this,
         config = DetourConfig(
-            apiKey = "<YOUR_API_KEY>",
-            appId = "<YOUR_APP_ID>",
+            apiKey = BuildConfig.DETOUR_API_KEY,
+            appId = BuildConfig.DETOUR_APP_ID,
             shouldUseClipboard = true,
+            // LinkProcessingMode controls which link sources the SDK handles:
+            //   ALL           – Universal Links + custom schemes + deferred (default)
+            //   WEB_ONLY      – Universal Links + deferred, ignores custom schemes
+            //   DEFERRED_ONLY – only deferred links; use when your nav framework
+            //                   (e.g. Jetpack Navigation) already handles intents
             linkProcessingMode = LinkProcessingMode.ALL,
             storage = EncryptedStorageProvider(this)
         ),
@@ -37,17 +47,13 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize SDK
         Detour.initialize(this, detourDelegate.config)
-
-        // Setup manual navigation buttons
         setupButtons()
 
         // Process links (Universal + Scheme + Deferred)
         detourDelegate.onCreate(intent)
     }
 
-    // Handles links when the activity was already running in the background
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -132,6 +138,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnPromo.setOnClickListener {
             startActivity(Intent(this, PromoActivity::class.java))
+        }
+
+        binding.btnDeferredOnly.setOnClickListener {
+            startActivity(Intent(this, DeferredOnlyExampleActivity::class.java))
         }
     }
 
