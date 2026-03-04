@@ -2,7 +2,7 @@
 
 # Detour Android SDK
 
-### Android SDK for handling deferred deep links
+Android SDK for handling deferred deep links
 
 ## Documentation
 
@@ -24,7 +24,7 @@ dependencies {
 
 ## Usage
 
-#### Initialize SDK and use `DetourDelegate` in your Activity
+### Initialize SDK and use `DetourDelegate` in your Activity
 
 ```kotlin
 import com.detour.sdk.Detour

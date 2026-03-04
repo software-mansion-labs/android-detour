@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    private val detourDelegate = DetourDelegate(
+    private val detourDelegate by lazy { DetourDelegate(
         lifecycleOwner = this,
         config = DetourConfig(
             apiKey = BuildConfig.DETOUR_API_KEY,
@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
             storage = EncryptedStorageProvider(this)
         ),
         onLinkResult = { result -> handleLinkResult(result) }
-    )
+    ) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -131,9 +131,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupButtons() {
         binding.btnProduct.setOnClickListener {
-            startActivity(Intent(this, ProductActivity::class.java).apply {
-                putExtra("productId", "123")
-            })
+            startActivity(Intent(this, ProductActivity::class.java))
         }
 
         binding.btnPromo.setOnClickListener {
