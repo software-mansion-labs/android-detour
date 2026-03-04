@@ -1,37 +1,24 @@
 package com.detour.sdk.storage
 
-import android.content.Context
-import android.content.SharedPreferences
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import androidx.core.content.edit
-
 /**
- * Detects if this is the first app launch.
+ * Detects if this is the first app launch using a configurable storage implementation.
+ * 
+ * Storage key used: `Detour_firstEntranceFlag`
  */
-internal class FirstLaunchDetector(context: Context) {
-
-    private val prefs: SharedPreferences = context.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
-    )
+internal class FirstLaunchDetector(private val storage: DetourStorage) {
 
     /**
      * Check if this is the first app launch.
      */
-    suspend fun isFirstLaunch(): Boolean = withContext(Dispatchers.IO) {
-        !prefs.getBoolean(FIRST_ENTRANCE_FLAG, false)
+    suspend fun isFirstLaunch(): Boolean {
+        val value = storage.getItem(StorageKeys.FIRST_ENTRANCE_FLAG)
+        return value != "true"
     }
 
     /**
      * Mark that the app has been launched.
      */
-    suspend fun markAsLaunched() = withContext(Dispatchers.IO) {
-        prefs.edit { putBoolean(FIRST_ENTRANCE_FLAG, true) }
-    }
-
-    companion object {
-        private const val PREFS_NAME = "Detour"
-        private const val FIRST_ENTRANCE_FLAG = "firstEntranceFlag"
+    suspend fun markAsLaunched() {
+        storage.setItem(StorageKeys.FIRST_ENTRANCE_FLAG, "true")
     }
 }

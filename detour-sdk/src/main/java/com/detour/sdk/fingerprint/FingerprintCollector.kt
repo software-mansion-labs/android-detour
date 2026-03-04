@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Resources
 import android.os.Build
 import android.util.DisplayMetrics
+import android.view.WindowManager
 import com.detour.sdk.models.LocaleInfo
 import com.detour.sdk.models.ProbabilisticFingerprint
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,7 @@ internal class FingerprintCollector(private val context: Context) {
      */
     suspend fun collectFingerprint(shouldUseClipboard: Boolean): ProbabilisticFingerprint =
         withContext(Dispatchers.IO) {
-            val displayMetrics = getDisplayMetrics()
+            val (width, height, density) = getScreenMetrics()
             val locale = Locale.getDefault()
             val timezone = TimeZone.getDefault()
 
@@ -31,9 +32,9 @@ internal class FingerprintCollector(private val context: Context) {
                 model = Build.MODEL,
                 manufacturer = Build.MANUFACTURER,
                 systemVersion = Build.VERSION.RELEASE,
-                screenWidth = displayMetrics.widthPixels,
-                screenHeight = displayMetrics.heightPixels,
-                scale = displayMetrics.density,
+                screenWidth = width,
+                screenHeight = height,
+                scale = density,
                 locale = listOf(LocaleInfo(languageTag = locale.toLanguageTag())),
                 timezone = timezone.id,
                 userAgent = getUserAgent(),
@@ -42,8 +43,20 @@ internal class FingerprintCollector(private val context: Context) {
             )
         }
 
-    private fun getDisplayMetrics(): DisplayMetrics {
-        return Resources.getSystem().displayMetrics
+    private data class ScreenMetrics(val width: Int, val height: Int, val density: Float)
+
+    private fun getScreenMetrics(): ScreenMetrics {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+            if (wm != null) {
+                val bounds = wm.currentWindowMetrics.bounds
+                val density = Resources.getSystem().displayMetrics.density
+                return ScreenMetrics(bounds.width(), bounds.height(), density)
+            }
+        }
+
+        val dm: DisplayMetrics = Resources.getSystem().displayMetrics
+        return ScreenMetrics(dm.widthPixels, dm.heightPixels, dm.density)
     }
 
     private fun getUserAgent(): String? {

@@ -6,9 +6,11 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.detour.example.databinding.ActivityMainBinding
+import com.detour.example.storage.EncryptedStorageProvider
 import com.detour.sdk.Detour
 import com.detour.sdk.DetourConfig
 import com.detour.sdk.DetourDelegate
+import com.detour.sdk.models.LinkProcessingMode
 import com.detour.sdk.models.LinkResult
 import com.detour.sdk.models.LinkType
 
@@ -16,13 +18,16 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    // DetourDelegate handles all link logic automatically
+    // DetourDelegate handles all link logic automatically.
+    // Using EncryptedStorageProvider for secure storage and ALL mode for full link handling.
     private val detourDelegate = DetourDelegate(
-        activity = this,
+        lifecycleOwner = this,
         config = DetourConfig(
             apiKey = "<YOUR_API_KEY>",
             appId = "<YOUR_APP_ID>",
-            shouldUseClipboard = true
+            shouldUseClipboard = true,
+            linkProcessingMode = LinkProcessingMode.ALL,
+            storage = EncryptedStorageProvider(this)
         ),
         onLinkResult = { result -> handleLinkResult(result) }
     )
@@ -38,11 +43,11 @@ class MainActivity : AppCompatActivity() {
         // Setup manual navigation buttons
         setupButtons()
 
-        // Process links (Universal + Deferred)
+        // Process links (Universal + Scheme + Deferred)
         detourDelegate.onCreate(intent)
     }
 
-    // Handles links if the activity was already running in the background
+    // Handles links when the activity was already running in the background
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -52,38 +57,35 @@ class MainActivity : AppCompatActivity() {
     private fun handleLinkResult(result: LinkResult) {
         when (result) {
             is LinkResult.Success -> {
-                // Update UI
                 binding.statusText.text = buildString {
-                    append("✅ Link processed!\n\n")
+                    append("Link processed!\n\n")
                     append("Type: ${result.type}\n")
                     append("Link: ${result.link}\n")
-                    append("Route: ${result.route ?: "none"}")
+                    append("Route: ${result.route}\n")
+                    append("Pathname: ${result.pathname}\n")
+                    if (result.params.isNotEmpty()) {
+                        append("Params: ${result.params}\n")
+                    }
                 }
 
                 Log.d(TAG, "Link: ${result.link}")
                 Log.d(TAG, "Route: ${result.route}")
+                Log.d(TAG, "Pathname: ${result.pathname}")
+                Log.d(TAG, "Params: ${result.params}")
                 Log.d(TAG, "Type: ${result.type}")
 
-                // Different behavior based on type
                 when (result.type) {
-                    LinkType.DEFERRED -> {
-                        Log.d(TAG, "Deferred link click detected")
-                    }
-
-                    LinkType.UNIVERSAL -> {
-                        Log.d(TAG, "Universal link click detected")
-                    }
+                    LinkType.DEFERRED -> Log.d(TAG, "Deferred link click detected")
+                    LinkType.UNIVERSAL -> Log.d(TAG, "Universal link click detected")
+                    LinkType.SCHEME -> Log.d(TAG, "Scheme link click detected")
                 }
 
-                // Navigate to route
-                result.route?.let { route ->
-                    navigateToRoute(route)
-                }
+                navigateToRoute(result.route)
             }
 
             is LinkResult.NotFirstLaunch -> {
                 binding.statusText.text =
-                    "ℹ️ Not first launch\n\nDeferred links only work on first app install."
+                    "Not first launch\n\nDeferred links only work on first app install."
                 Log.d(TAG, "Not first launch")
             }
 
@@ -93,7 +95,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             is LinkResult.Error -> {
-                binding.statusText.text = "❌ Error: ${result.exception.message}"
+                binding.statusText.text = "Error: ${result.exception.message}"
                 Log.e(TAG, "Error processing link", result.exception)
                 Toast.makeText(this, "Error processing link", Toast.LENGTH_LONG).show()
             }
@@ -103,7 +105,7 @@ class MainActivity : AppCompatActivity() {
     private fun navigateToRoute(route: String) {
         when {
             route.startsWith("/products/") -> {
-                val productId = route.removePrefix("/products/").trim('/')
+                val productId = route.removePrefix("/products/").split("?").first().trim('/')
                 if (productId.isNotEmpty()) {
                     startActivity(Intent(this, ProductActivity::class.java).apply {
                         putExtra("productId", productId)

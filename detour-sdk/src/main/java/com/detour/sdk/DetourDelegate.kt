@@ -1,22 +1,25 @@
 package com.detour.sdk
 
 import android.content.Intent
-import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.detour.sdk.models.LinkResult
 import kotlinx.coroutines.launch
 
 /**
- * This class provides a approach to handling both Universal App Links
- * and Deferred Deep Links. It automatically manages the activity
- * lifecycle and delegates link processing to the Detour SDK.
+ * Convenience wrapper for handling Universal App Links, Scheme Links,
+ * and Deferred Deep Links. Delegates link processing to the [Detour] SDK
+ * and invokes a callback with the result.
+ *
+ * Compatible with any [LifecycleOwner] — `ComponentActivity`, `AppCompatActivity`,
+ * or `Fragment`.
  *
  * Usage:
  * ```
  * class MainActivity : AppCompatActivity() {
  *
  *     private val detourDelegate = DetourDelegate(
- *         activity = this,
+ *         lifecycleOwner = this,
  *         config = DetourConfig(
  *             appId = "your-app-id",
  *             apiKey = "your-api-key"
@@ -39,57 +42,38 @@ import kotlinx.coroutines.launch
  *         setIntent(intent)
  *         detourDelegate.onNewIntent(intent)
  *     }
- *
- *     private fun handleLinkResult(result: LinkResult) {
- *         when (result) {
- *             is LinkResult.Success -> {
- *                 // Navigate to result.route
- *                 // Check result.type (DEFERRED or UNIVERSAL)
- *             }
- *             is LinkResult.NoLink -> {
- *                 // Normal app launch
- *             }
- *             is LinkResult.NotFirstLaunch -> {
- *                 // Already processed deferred link
- *             }
- *             is LinkResult.Error -> {
- *                 // Handle error
- *             }
- *         }
- *     }
  * }
  * ```
  *
- * @property activity The AppCompatActivity where links should be processed
+ * @property lifecycleOwner The lifecycle owner whose scope is used for coroutines
  * @property config Detour SDK configuration
  * @property onLinkResult Callback invoked with the link processing result
  */
 class DetourDelegate(
-    private val activity: AppCompatActivity,
+    private val lifecycleOwner: LifecycleOwner,
     val config: DetourConfig,
     private val onLinkResult: (LinkResult) -> Unit
 ) {
 
     /**
-     * Call from Activity.onCreate() to handle both Universal and Deferred links.
-     * Automatically checks for Universal Link first, falls back to Deferred Link.
+     * Call from Activity.onCreate() to handle Universal, Scheme, and Deferred links.
      *
      * @param intent The activity intent
      */
     fun onCreate(intent: Intent) {
-        activity.lifecycleScope.launch {
+        lifecycleOwner.lifecycleScope.launch {
             val result = Detour.processLink(intent)
             onLinkResult(result)
         }
     }
 
     /**
-     * Call from Activity.onNewIntent() to handle Universal Links when app is running.
+     * Call from Activity.onNewIntent() to handle links when app is running.
      *
      * @param intent The new intent
      */
     fun onNewIntent(intent: Intent) {
-        activity.lifecycleScope.launch {
+        lifecycleOwner.lifecycleScope.launch {
             val result = Detour.processLink(intent)
             onLinkResult(result)
         }

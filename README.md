@@ -1,6 +1,8 @@
+<img src="https://github.com/user-attachments/assets/c965b51b-7307-477a-8d22-9c9cd6da6231" alt="React Native Detour by Software Mansion" width="100%"/>
+
 # Detour Android SDK
 
-### Android Detour is SDK for handling deferred deep links for Android applications
+### Android SDK for handling deferred deep links
 
 ## Documentation
 
@@ -34,11 +36,10 @@ import com.detour.sdk.models.LinkType
 class MainActivity : AppCompatActivity() {
 
     private val detourDelegate = DetourDelegate(
-        activity = this,
+        lifecycleOwner = this,
         config = DetourConfig(
             appId = "<REPLACE_WITH_APP_ID_FROM_PLATFORM>",
-            apiKey = "<REPLACE_WITH_YOUR_API_KEY>",
-            shouldUseClipboard = true
+            apiKey = "<REPLACE_WITH_YOUR_API_KEY>"
         ),
         onLinkResult = { result -> handleLinkResult(result) }
     )
@@ -50,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         // Initialize SDK
         Detour.initialize(this, detourDelegate.config)
 
-        // Process links (Universal + Deferred)
+        // Process links (Universal + Scheme + Deferred)
         detourDelegate.onCreate(intent)
     }
 
@@ -63,13 +64,13 @@ class MainActivity : AppCompatActivity() {
     private fun handleLinkResult(result: LinkResult) {
         when (result) {
             is LinkResult.Success -> {
-                // Link successfully processed
-                val link = result.link    // Full matched URL
-                val route = result.route  // Extracted route for navigation
-                val type = result.type    // DEFERRED or UNIVERSAL
+                val link = result.link          // Full matched URL
+                val route = result.route        // Extracted route for navigation
+                val pathname = result.pathname  // Route path without query string
+                val params = result.params      // Parsed query parameters
+                val type = result.type          // DEFERRED, UNIVERSAL, or SCHEME
 
-                // Navigate based on route
-                route?.let { navigateToRoute(it) }
+                navigateToRoute(route)
             }
 
             is LinkResult.NotFirstLaunch -> {
@@ -81,7 +82,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             is LinkResult.Error -> {
-                // Handle error
                 Log.e(TAG, "Error processing link", result.exception)
             }
         }
@@ -90,8 +90,8 @@ class MainActivity : AppCompatActivity() {
     private fun navigateToRoute(route: String) {
         when {
             route.startsWith("/product/") -> {
-                val productId = route.removePrefix("/product/").trim('/')
-                // Navigate to product screen
+                val productId = route.removePrefix("/product/").split("?").first()
+                // Navigate to product screen with productId
             }
             route.startsWith("/promo") -> {
                 // Navigate to promo screen
@@ -107,29 +107,31 @@ class MainActivity : AppCompatActivity() {
 
 ## Types
 
-The package exposes several types to help you with type-checking in your own codebase.
-
 **DetourConfig**
 
 Configuration for the SDK:
 
 ```kotlin
 data class DetourConfig(
-    /**
-     * Your application ID from the Detour dashboard.
-     */
-    val appId: String,
-
-    /**
-     * Your API key from the Detour dashboard.
-     */
+    /** Your API key from the Detour dashboard. */
     val apiKey: String,
 
+    /** Your application ID from the Detour dashboard. */
+    val appId: String,
+
+    /** Check clipboard for deferred links on first launch (default: true). */
+    val shouldUseClipboard: Boolean = true,
+
     /**
-     * Optional: Check clipboard for deferred links on first launch.
-     * Defaults to true if not provided.
+     * Controls which link sources are handled by the SDK (default: ALL).
+     * - ALL: deferred + Universal/App Links + custom scheme links
+     * - WEB_ONLY: deferred + Universal/App Links, but NOT custom scheme links
+     * - DEFERRED_ONLY: only deferred links (no intent processing)
      */
-    val shouldUseClipboard: Boolean = true
+    val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
+
+    /** Custom storage implementation (defaults to SharedPreferences). */
+    val storage: DetourStorage? = null
 )
 ```
 
@@ -139,28 +141,16 @@ Result types returned by the SDK:
 
 ```kotlin
 sealed class LinkResult {
-    /**
-     * Link successfully processed.
-     */
     data class Success(
-        val link: String,        // Full URL that was matched
-        val route: String?,      // Extracted route for navigation
-        val type: LinkType       // DEFERRED or UNIVERSAL
+        val link: String,                      // Full URL that was matched
+        val route: String,                     // Extracted route for navigation
+        val pathname: String,                  // Route path without query string
+        val type: LinkType,                    // DEFERRED, UNIVERSAL, or SCHEME
+        val params: Map<String, String>        // Parsed query parameters
     ) : LinkResult()
 
-    /**
-     * No deferred link available - not first launch.
-     */
-    object NotFirstLaunch : LinkResult()
-
-    /**
-     * No link found - normal app launch.
-     */
-    object NoLink : LinkResult()
-
-    /**
-     * Error occurred during processing.
-     */
+    data object NotFirstLaunch : LinkResult()  // Not first launch
+    data object NoLink : LinkResult()          // Normal app launch
     data class Error(val exception: Exception) : LinkResult()
 }
 ```
@@ -171,15 +161,33 @@ Type of deep link:
 
 ```kotlin
 enum class LinkType {
-    /**
-     * Deferred deep link - user clicked link before app was installed.
-     */
-    DEFERRED,
+    DEFERRED,   // User clicked link before app was installed
+    UNIVERSAL,  // Universal App Link (http/https)
+    SCHEME      // Custom scheme deep link (e.g. myapp://...)
+}
+```
 
-    /**
-     * Universal App Link - user clicked link with app already installed.
-     */
-    UNIVERSAL
+**LinkProcessingMode**
+
+Controls which link sources are handled:
+
+```kotlin
+enum class LinkProcessingMode {
+    ALL,            // Handle all link types (default)
+    WEB_ONLY,       // Handle Universal Links + deferred, skip custom schemes
+    DEFERRED_ONLY   // Only handle deferred links
+}
+```
+
+**DetourStorage**
+
+Interface for custom storage implementations:
+
+```kotlin
+interface DetourStorage {
+    suspend fun getItem(key: String): String?
+    suspend fun setItem(key: String, value: String)
+    suspend fun removeItem(key: String) { /* optional */ }
 }
 ```
 
@@ -191,21 +199,17 @@ Main SDK singleton:
 
 ```kotlin
 object Detour {
-    /**
-     * Initialize SDK (call once in Application.onCreate or Activity.onCreate)
-     */
+    /** Initialize SDK (call once in Application.onCreate or Activity.onCreate) */
     fun initialize(context: Context, config: DetourConfig)
 
-    /**
-     * Process intent and extract deep link.
-     * Automatically detects Universal or Deferred links.
-     */
+    /** Process intent and extract deep link (Universal, Scheme, or Deferred) */
     suspend fun processLink(intent: Intent): LinkResult
 
-    /**
-     * Get deferred link only (ignore Universal Links).
-     */
+    /** Get deferred link only (ignore Universal/Scheme Links) */
     suspend fun getDeferredLink(): LinkResult
+
+    /** Resolve a short link URL to its full data */
+    suspend fun resolveShortLink(url: String): ShortLinkResponse?
 }
 ```
 
@@ -215,19 +219,26 @@ Convenience class for automatic link handling:
 
 ```kotlin
 class DetourDelegate(
-    private val activity: AppCompatActivity,
+    private val lifecycleOwner: LifecycleOwner,
     val config: DetourConfig,
     private val onLinkResult: (LinkResult) -> Unit
 ) {
-    /**
-     * Call from Activity.onCreate()
-     */
     fun onCreate(intent: Intent)
-
-    /**
-     * Call from Activity.onNewIntent()
-     */
     fun onNewIntent(intent: Intent)
+}
+```
+
+### DetourAnalytics
+
+Analytics API for tracking events:
+
+```kotlin
+object DetourAnalytics {
+    /** Log a predefined analytics event with optional data */
+    fun logEvent(eventName: DetourEventNames, data: Any? = null)
+
+    /** Log a retention event */
+    fun logRetention(eventName: String)
 }
 ```
 
@@ -249,8 +260,6 @@ The SDK requires the following permissions (automatically included):
 ## Advanced Usage
 
 #### Manual control without DetourDelegate
-
-If you need more control over link processing:
 
 ```kotlin
 class MainActivity : AppCompatActivity() {
@@ -274,16 +283,60 @@ class MainActivity : AppCompatActivity() {
 }
 ```
 
-#### Get deferred link only
+#### Deferred-only mode
+
+Use when your navigation framework already handles Universal/Scheme Links:
+
+```kotlin
+val config = DetourConfig(
+    appId = "your-app-id",
+    apiKey = "your-api-key",
+    linkProcessingMode = LinkProcessingMode.DEFERRED_ONLY
+)
+```
+
+#### Get deferred link only (without DetourDelegate)
 
 ```kotlin
 lifecycleScope.launch {
     val result = Detour.getDeferredLink()
-    // Will only return deferred links, not universal links
+    // Will only return deferred links, not universal or scheme links
 }
 ```
 
-## :balance_scale: License
+#### Custom Storage Provider
+
+The SDK uses storage to persist the "first entrance" flag and device ID. By default, it uses `SharedPreferences`, but you can provide a custom implementation:
+
+```kotlin
+import com.detour.sdk.storage.DetourStorage
+
+// Example: Using EncryptedSharedPreferences
+class EncryptedStorageProvider(context: Context) : DetourStorage {
+    private val prefs = EncryptedSharedPreferences.create(
+        context,
+        "DetourSecure",
+        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    override suspend fun getItem(key: String): String? =
+        withContext(Dispatchers.IO) { prefs.getString(key, null) }
+
+    override suspend fun setItem(key: String, value: String) {
+        withContext(Dispatchers.IO) { prefs.edit().putString(key, value).apply() }
+    }
+}
+
+val config = DetourConfig(
+    appId = "your-app-id",
+    apiKey = "your-api-key",
+    storage = EncryptedStorageProvider(this)
+)
+```
+
+## License
 
 This library is licensed under [The MIT License](../LICENSE).
 
@@ -292,4 +345,3 @@ This library is licensed under [The MIT License](../LICENSE).
 Since 2012, [Software Mansion](https://swmansion.com) is a software agency with experience in building web and mobile apps. We are Core React Native Contributors and experts in dealing with all kinds of React Native issues. We can help you build your next dream product – [Hire us](https://swmansion.com/contact/projects?utm_source=detour&utm_medium=readme).
 
 [![swm](https://logo.swmansion.com/logo?color=white&variant=desktop&width=150&tag=react-native-detour-github 'Software Mansion')](https://swmansion.com)
-

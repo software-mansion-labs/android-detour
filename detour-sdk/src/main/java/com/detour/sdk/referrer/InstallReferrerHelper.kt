@@ -2,6 +2,7 @@ package com.detour.sdk.referrer
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +70,8 @@ internal class InstallReferrerHelper(private val context: Context) {
         }
     }
 
-    private fun extractClickId(referrerUrl: String): String? {
+    @VisibleForTesting
+    internal fun extractClickId(referrerUrl: String): String? {
         return try {
             val decodedUrl = java.net.URLDecoder.decode(referrerUrl, "UTF-8")
             val regex = Regex("(?:^|&)click_id=([^&]+)")

@@ -4,16 +4,19 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import com.detour.sdk.analytics.DetourAnalytics
 import com.detour.sdk.api.DetourApiClient
 import com.detour.sdk.fingerprint.FingerprintCollector
 import com.detour.sdk.models.DeterministicFingerprint
+import com.detour.sdk.models.LinkProcessingMode
 import com.detour.sdk.models.LinkResult
 import com.detour.sdk.models.LinkType
+import com.detour.sdk.models.ShortLinkResponse
 import com.detour.sdk.referrer.InstallReferrerHelper
+import com.detour.sdk.storage.DefaultStorageProvider
+import com.detour.sdk.storage.DetourStorage
 import com.detour.sdk.storage.FirstLaunchDetector
 import com.detour.sdk.utils.UrlHelpers
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Main entry point for Detour SDK.
@@ -27,22 +30,16 @@ import kotlinx.coroutines.withContext
  * )
  * Detour.initialize(context, config)
  *
- * // Process any link (Universal or Deferred) in onCreate()
+ * // Process any link (Universal, Scheme, or Deferred) in onCreate()
  * lifecycleScope.launch {
  *     when (val result = Detour.processLink(intent)) {
  *         is LinkResult.Success -> {
  *             // Navigate to result.route
- *             // Check result.type (DEFERRED or UNIVERSAL)
+ *             // Access result.params, result.pathname, result.type
  *         }
- *         is LinkResult.NoLink -> {
- *             // Normal app launch
- *         }
- *         is LinkResult.NotFirstLaunch -> {
- *             // Already processed deferred link
- *         }
- *         is LinkResult.Error -> {
- *             // Handle error
- *         }
+ *         is LinkResult.NoLink -> { /* Normal app launch */ }
+ *         is LinkResult.NotFirstLaunch -> { /* Already processed deferred link */ }
+ *         is LinkResult.Error -> { /* Handle error */ }
  *     }
  * }
  * ```
@@ -59,6 +56,11 @@ object Detour {
 
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
+    private lateinit var storage: DetourStorage
+    private lateinit var apiClient: DetourApiClient
+    private lateinit var fingerprintCollector: FingerprintCollector
+    private lateinit var installReferrerHelper: InstallReferrerHelper
+    private lateinit var firstLaunchDetector: FirstLaunchDetector
 
     /**
      * Initialize Detour SDK.
@@ -67,6 +69,7 @@ object Detour {
      * @param context Application or Activity context
      * @param config Detour configuration
      */
+    @JvmStatic
     @Synchronized
     fun initialize(context: Context, config: DetourConfig) {
         if (isInitialized) {
@@ -76,37 +79,63 @@ object Detour {
 
         this.applicationContext = context.applicationContext
         this.config = config
-        this.isInitialized = true
+        this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
+        this.apiClient = DetourApiClient(config)
+        this.fingerprintCollector = FingerprintCollector(context.applicationContext)
+        this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
+        this.firstLaunchDetector = FirstLaunchDetector(storage)
 
+        // Initialize analytics subsystem
+        DetourAnalytics.initialize(config, storage)
+        DetourAnalytics.logAppOpenIfNeeded()
+
+        this.isInitialized = true
         Log.d(TAG, "SDK initialized")
     }
 
     /**
      * Process intent and extract deep link.
-     * Automatically detects link type (Universal vs Deferred) and returns appropriate result.
+     * Automatically detects link type (Universal, Scheme, or Deferred) and returns appropriate result.
      *
      * Priority order:
-     * 1. Universal App Link (if intent contains ACTION_VIEW with data)
-     * 2. Deferred Deep Link (API call, only on first launch)
+     * 1. Universal App Link (if intent contains ACTION_VIEW with http/https data)
+     * 2. Scheme Link (if intent contains ACTION_VIEW with custom scheme and mode is ALL)
+     * 3. Deferred Deep Link (API call, only on first launch)
+     *
+     * In [LinkProcessingMode.DEFERRED_ONLY] mode, steps 1-2 are skipped entirely.
      *
      * @param intent Activity intent to process
      * @return LinkResult with link data or status
-     * @throws IllegalStateException if SDK is not initialized
      */
-    suspend fun processLink(intent: Intent): LinkResult = withContext(Dispatchers.Main) {
-        check(isInitialized) {
-            "Detour SDK not initialized. Call Detour.initialize() first."
+    @JvmStatic
+    suspend fun processLink(intent: Intent): LinkResult {
+        if (!isInitialized) {
+            return LinkResult.Error(
+                IllegalStateException("Detour SDK not initialized. Call Detour.initialize() first.")
+            )
         }
 
-        try {
-            // Priority 1: Check for Universal App Link
-            if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
-                return@withContext processUniversalLink(intent.data!!)
+        return try {
+            // Step 1: Try to extract link from intent (unless DEFERRED_ONLY)
+            if (config.linkProcessingMode != LinkProcessingMode.DEFERRED_ONLY) {
+                if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+                    val uri = intent.data!!
+                    val uriString = uri.toString()
+
+                    if (UrlHelpers.isWebUrl(uriString)) {
+                        // Mark first entrance so subsequent launches don't try deferred matching
+                        firstLaunchDetector.markAsLaunched()
+                        return processUniversalLink(uri)
+                    }
+
+                    if (config.linkProcessingMode == LinkProcessingMode.ALL) {
+                        return processSchemeLink(uri)
+                    }
+                }
             }
 
-            // Priority 2: Check for Deferred Link
-            return@withContext processDeferredLink()
-
+            // Step 2: Fallback to deferred link
+            processDeferredLink()
         } catch (e: Exception) {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing link", e)
             LinkResult.Error(e)
@@ -114,21 +143,23 @@ object Detour {
     }
 
     /**
-     * Get deferred link only (ignore Universal Links).
-     * Use this if you want to handle Universal Links separately.
+     * Get deferred link only (ignore Universal/Scheme Links).
+     * Use this if you want to handle other link types separately.
      *
      * This should be called once per app session, typically in your main Activity.
      * The function is idempotent - multiple calls in the same session will return NotFirstLaunch.
      *
      * @return LinkResult.Success with DEFERRED type, or NotFirstLaunch/NoLink/Error
-     * @throws IllegalStateException if SDK is not initialized
      */
-    suspend fun getDeferredLink(): LinkResult = withContext(Dispatchers.Main) {
-        check(isInitialized) {
-            "Detour SDK not initialized. Call Detour.initialize() first."
+    @JvmStatic
+    suspend fun getDeferredLink(): LinkResult {
+        if (!isInitialized) {
+            return LinkResult.Error(
+                IllegalStateException("Detour SDK not initialized. Call Detour.initialize() first.")
+            )
         }
 
-        try {
+        return try {
             processDeferredLink()
         } catch (e: Exception) {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing deferred link", e)
@@ -137,18 +168,74 @@ object Detour {
     }
 
     /**
-     * Process Universal App Link from URI.
+     * Resolve a short link URL to its full link data.
+     *
+     * @param url The short link URL to resolve
+     * @return ShortLinkResponse or null on 404/error
      */
-    private fun processUniversalLink(uri: Uri): LinkResult {
-        Log.d(TAG, "Processing Universal Link: $uri")
+    @JvmStatic
+    suspend fun resolveShortLink(url: String): ShortLinkResponse? {
+        if (!isInitialized) {
+            Log.w(TAG, "SDK not initialized. Call Detour.initialize() first.")
+            return null
+        }
+
+        return apiClient.resolveShortLink(url)
+    }
+
+    /**
+     * Process Universal App Link from URI.
+     * If the URI has a single path segment, attempt short-link resolution first.
+     */
+    private suspend fun processUniversalLink(uri: Uri): LinkResult {
+        Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
-        val route = UrlHelpers.parseRoute(link)
+
+        // Short link resolution: single-segment path indicates a short link
+        if (UrlHelpers.isSingleSegmentPath(uri)) {
+            val shortLinkResult = apiClient.resolveShortLink(link)
+            if (shortLinkResult?.link != null) {
+                Log.d(TAG, "Short link resolved successfully")
+                // Re-process the resolved link through parseRoute (matches RN SDK's recursive resolveLink)
+                val route = UrlHelpers.parseRoute(shortLinkResult.link) ?: "/"
+                return LinkResult.Success(
+                    link = shortLinkResult.link,
+                    route = route,
+                    pathname = UrlHelpers.extractPathname(route),
+                    type = LinkType.UNIVERSAL,
+                    params = UrlHelpers.parseQueryParams(shortLinkResult.link)
+                )
+            }
+        }
+
+        val route = UrlHelpers.parseRoute(link) ?: "/"
 
         return LinkResult.Success(
             link = link,
             route = route,
-            type = LinkType.UNIVERSAL
+            pathname = UrlHelpers.extractPathname(route),
+            type = LinkType.UNIVERSAL,
+            params = UrlHelpers.parseQueryParams(link)
+        )
+    }
+
+    /**
+     * Process custom-scheme deep link.
+     * Extracts route as host + path + query, matching RN SDK's `getRouteFromDeepLink()`.
+     */
+    private fun processSchemeLink(uri: Uri): LinkResult {
+        Log.d(TAG, "Processing Scheme Link")
+
+        val link = uri.toString()
+        val route = UrlHelpers.getRouteFromDeepLink(uri)
+
+        return LinkResult.Success(
+            link = link,
+            route = route,
+            pathname = UrlHelpers.extractPathname(route),
+            type = LinkType.SCHEME,
+            params = UrlHelpers.parseQueryParams(link)
         )
     }
 
@@ -165,7 +252,6 @@ object Detour {
         sessionHandled = true
 
         // Check if first launch
-        val firstLaunchDetector = FirstLaunchDetector(applicationContext)
         if (!firstLaunchDetector.isFirstLaunch()) {
             Log.d(TAG, "Not first launch")
             return LinkResult.NotFirstLaunch
@@ -176,21 +262,16 @@ object Detour {
         Log.d(TAG, "First launch detected, processing deferred link")
 
         // Try to get click ID from install referrer (deterministic matching)
-        val installReferrerHelper = InstallReferrerHelper(applicationContext)
         val clickId = installReferrerHelper.getClickId()
 
-        val apiClient = DetourApiClient()
-        val link: String?
-
-        if (clickId != null) {
+        val link: String? = if (clickId != null) {
             Log.d(TAG, "Using deterministic matching with click_id")
             val fingerprint = DeterministicFingerprint(clickId)
-            link = apiClient.matchLink(config, fingerprint)
+            apiClient.matchLink(fingerprint)
         } else {
             Log.d(TAG, "The click_id not found, using probabilistic matching")
-            val fingerprintCollector = FingerprintCollector(applicationContext)
             val fingerprint = fingerprintCollector.collectFingerprint(config.shouldUseClipboard)
-            link = apiClient.matchLink(config, fingerprint)
+            apiClient.matchLink(fingerprint)
         }
 
         if (link == null) {
@@ -198,14 +279,16 @@ object Detour {
             return LinkResult.NoLink
         }
 
-        // Parse route from link
-        val route = UrlHelpers.parseRoute(link)
+        // Parse route from link (strips app hash, extracts path)
+        val route = UrlHelpers.parseRoute(link) ?: "/"
 
-        Log.d(TAG, "Deferred link matched: $link, route: $route")
+        Log.d(TAG, "Deferred link matched successfully")
         return LinkResult.Success(
             link = link,
             route = route,
-            type = LinkType.DEFERRED
+            pathname = UrlHelpers.extractPathname(route),
+            type = LinkType.DEFERRED,
+            params = UrlHelpers.parseQueryParams(link)
         )
     }
 }

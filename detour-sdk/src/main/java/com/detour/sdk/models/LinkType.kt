@@ -9,10 +9,15 @@ enum class LinkType {
      * Matched via API call with device fingerprint.
      */
     DEFERRED,
-    
+
     /**
      * Universal App Link - user clicked link with app already installed.
-     * Handled directly by Android Intent system.
+     * Handled directly by Android Intent system (http/https).
      */
-    UNIVERSAL
+    UNIVERSAL,
+
+    /**
+     * Custom scheme deep link (e.g. myapp://product/123).
+     */
+    SCHEME
 }
