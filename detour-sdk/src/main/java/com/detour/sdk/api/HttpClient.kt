@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 internal object HttpClient {
 
     val okHttp: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(15, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)

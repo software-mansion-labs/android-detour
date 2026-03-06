@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Detour Android SDK"
 include(":detour-sdk")
-include(":app-example")
+include(":examples:example")
+include(":examples:example-deferred-only")

@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 
 /**
  * API client for Detour link-matching and short-link resolution.
@@ -22,41 +23,34 @@ internal class DetourApiClient(private val config: DetourConfig) {
      * @return Matched link or null
      */
     suspend fun matchLink(fingerprint: DeviceFingerprint): String? = withContext(Dispatchers.IO) {
-        try {
-            val json = HttpClient.gson.toJson(fingerprint)
-            Log.d(TAG, "Sending fingerprint to API")
+        val json = HttpClient.gson.toJson(fingerprint)
+        Log.d(TAG, "Sending fingerprint to API")
 
-            val requestBody = json.toRequestBody(HttpClient.JSON)
+        val request = Request.Builder()
+            .url(MATCH_LINK_URL)
+            .post(json.toRequestBody(HttpClient.JSON))
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Authorization", "Bearer ${config.apiKey}")
+            .addHeader("X-App-ID", config.appId)
+            .build()
 
-            val request = Request.Builder()
-                .url(MATCH_LINK_URL)
-                .post(requestBody)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${config.apiKey}")
-                .addHeader("X-App-ID", config.appId)
-                .build()
-
-            HttpClient.okHttp.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    if (responseBody != null) {
-                        val linkResponse = HttpClient.gson.fromJson(
-                            responseBody,
-                            LinkMatchResponse::class.java
-                        )
-                        if (linkResponse.link != null) {
-                            Log.d(TAG, "Link matched successfully")
-                        }
-                        return@use linkResponse.link
-                    }
-                } else {
-                    Log.w(TAG, "[Detour:NETWORK_ERROR] API request failed: ${response.code}")
+        HttpClient.okHttp.newCall(request).execute().use { response ->
+            when {
+                response.isSuccessful -> {
+                    val responseBody = response.body?.string() ?: return@use null
+                    val linkResponse = HttpClient.gson.fromJson(responseBody, LinkMatchResponse::class.java)
+                    if (linkResponse.link != null) Log.d(TAG, "Link matched successfully")
+                    linkResponse.link
                 }
-                null
+                response.code == 404 -> {
+                    Log.d(TAG, "No matching link found")
+                    null
+                }
+                else -> {
+                    val errorMessage = response.body?.string()?.takeIf { it.isNotBlank() } ?: response.message
+                    throw IOException("[${response.code}] $errorMessage")
+                }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "[Detour:NETWORK_ERROR] API request exception", e)
-            null
         }
     }
 

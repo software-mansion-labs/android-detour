@@ -9,14 +9,14 @@ sealed class LinkResult {
     /**
      * Link successfully processed.
      *
-     * @property link Full URL that was matched or opened
+     * @property url Full URL that was matched or opened
      * @property route Extracted route for navigation (path + query, first segment stripped)
      * @property pathname Route path without query string
      * @property type Source of the link (DEFERRED, UNIVERSAL, or SCHEME)
      * @property params Parsed query parameters from the URL
      */
     data class Success(
-        val link: String,
+        val url: String,
         val route: String,
         val pathname: String,
         val type: LinkType,

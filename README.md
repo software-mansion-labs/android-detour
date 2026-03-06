@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleLinkResult(result: LinkResult) {
         when (result) {
             is LinkResult.Success -> {
-                val link = result.link          // Full matched URL
+                val url = result.url            // Full matched URL
                 val route = result.route        // Extracted route for navigation
                 val pathname = result.pathname  // Route path without query string
                 val params = result.params      // Parsed query parameters
@@ -142,7 +142,7 @@ Result types returned by the SDK:
 ```kotlin
 sealed class LinkResult {
     data class Success(
-        val link: String,                      // Full URL that was matched
+        val url: String,                       // Full URL that was matched
         val route: String,                     // Extracted route for navigation
         val pathname: String,                  // Route path without query string
         val type: LinkType,                    // DEFERRED, UNIVERSAL, or SCHEME

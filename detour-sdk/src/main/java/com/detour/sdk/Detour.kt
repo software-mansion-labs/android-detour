@@ -77,6 +77,12 @@ object Detour {
             return
         }
 
+        if (config.apiKey.isBlank() || config.appId.isBlank()) {
+            Log.e(TAG, "[Detour] apiKey or appId is missing — SDK will not process links. " +
+                       "Set your credentials in DetourConfig.")
+            return
+        }
+
         this.applicationContext = context.applicationContext
         this.config = config
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
@@ -200,7 +206,7 @@ object Detour {
                 // Re-process the resolved link through parseRoute (matches RN SDK's recursive resolveLink)
                 val route = UrlHelpers.parseRoute(shortLinkResult.link) ?: "/"
                 return LinkResult.Success(
-                    link = shortLinkResult.link,
+                    url = shortLinkResult.link,
                     route = route,
                     pathname = UrlHelpers.extractPathname(route),
                     type = LinkType.UNIVERSAL,
@@ -212,7 +218,7 @@ object Detour {
         val route = UrlHelpers.parseRoute(link) ?: "/"
 
         return LinkResult.Success(
-            link = link,
+            url = link,
             route = route,
             pathname = UrlHelpers.extractPathname(route),
             type = LinkType.UNIVERSAL,
@@ -231,7 +237,7 @@ object Detour {
         val route = UrlHelpers.getRouteFromDeepLink(uri)
 
         return LinkResult.Success(
-            link = link,
+            url = link,
             route = route,
             pathname = UrlHelpers.extractPathname(route),
             type = LinkType.SCHEME,
@@ -284,7 +290,7 @@ object Detour {
 
         Log.d(TAG, "Deferred link matched successfully")
         return LinkResult.Success(
-            link = link,
+            url = link,
             route = route,
             pathname = UrlHelpers.extractPathname(route),
             type = LinkType.DEFERRED,

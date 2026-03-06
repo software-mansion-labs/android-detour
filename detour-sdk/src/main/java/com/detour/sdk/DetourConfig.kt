@@ -20,11 +20,6 @@ data class DetourConfig(
     val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
     val storage: DetourStorage? = null
 ) {
-    init {
-        require(apiKey.isNotBlank()) { "apiKey cannot be blank" }
-        require(appId.isNotBlank()) { "appId cannot be blank" }
-    }
-
     /**
      * Builder for Java callers (data class defaults don't work from Java).
      *
