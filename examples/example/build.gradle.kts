@@ -13,11 +13,11 @@ val secrets = Properties().apply {
 }
 
 android {
-    namespace = "com.detour.example"
+    namespace = "com.swmansion.detour.example"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.detour.example"
+        applicationId = "com.swmansion.detour.example"
         minSdk = 23
         targetSdk = 34
         versionCode = 1

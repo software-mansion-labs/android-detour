@@ -22,7 +22,7 @@ This example demonstrates `LinkProcessingMode.DEFERRED_ONLY` — the integration
 ## Quick start
 
 1. Configure this app in the [Detour Dashboard](https://godetour.dev). You'll need two values:
-   - **Package name:** `com.detour.example.deferred` (from `AndroidManifest.xml`)
+   - **Package name:** `swmansion.example.deferred` (from `AndroidManifest.xml`)
    - **SHA256 certificate fingerprint** — run this to get it from your debug keystore:
      ```shell
      keytool -list -v \

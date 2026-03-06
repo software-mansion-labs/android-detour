@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.detour.sdk"
+    namespace = "com.swmansion.detour"
     compileSdk = 34
 
     defaultConfig {
@@ -62,8 +62,8 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "com.detour"
-                artifactId = "detour-sdk"
+                groupId = "com.swmansion"
+                artifactId = "swmansion-detour"
                 version = "0.1.0"
 
                 pom {
@@ -87,8 +87,8 @@ afterEvaluate {
                     }
 
                     scm {
-                        connection.set("scm:git:git://github.com/software-mansion-labs/detour-android-sdk.git")
-                        developerConnection.set("scm:git:ssh://github.com/software-mansion-labs/detour-android-sdk.git")
+                        connection.set("scm:git:git://github.com/software-mansion-labs/swmansion-android-detour.git")
+                        developerConnection.set("scm:git:ssh://github.com/software-mansion-labs/swmansion-android-detour.git")
                         url.set("https://github.com/software-mansion-labs/detour-android-sdk")
                     }
                 }

@@ -18,7 +18,7 @@ Add the SDK to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.detour:detour-sdk:0.1.0")
+    implementation("com.swmansion:detour-sdk:0.1.0")
 }
 ```
 
@@ -27,11 +27,11 @@ dependencies {
 ### Initialize SDK and use `DetourDelegate` in your Activity
 
 ```kotlin
-import com.detour.sdk.Detour
-import com.detour.sdk.DetourConfig
-import com.detour.sdk.DetourDelegate
-import com.detour.sdk.models.LinkResult
-import com.detour.sdk.models.LinkType
+import com.swmansion.detour.Detour
+import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.DetourDelegate
+import com.swmansion.detour.models.LinkResult
+import com.swmansion.detour.models.LinkType
 
 class MainActivity : AppCompatActivity() {
 
@@ -309,7 +309,7 @@ lifecycleScope.launch {
 The SDK uses storage to persist the "first entrance" flag and device ID. By default, it uses `SharedPreferences`, but you can provide a custom implementation:
 
 ```kotlin
-import com.detour.sdk.storage.DetourStorage
+import com.swmansion.detour.storage.DetourStorage
 
 // Example: Using EncryptedSharedPreferences
 class EncryptedStorageProvider(context: Context) : DetourStorage {

@@ -1,6 +1,6 @@
 # Detour Android SDK — Full Example
 
-This example demonstrates a full integration of `com.detour:detour-sdk` using `DetourDelegate` and `LinkProcessingMode.ALL`.
+This example demonstrates a full integration of `com.swmansion:detour-sdk` using `DetourDelegate` and `LinkProcessingMode.ALL`.
 
 ## Scenario represented
 
@@ -29,7 +29,7 @@ This example demonstrates a full integration of `com.detour:detour-sdk` using `D
    ```shell
    adb shell am start -a android.intent.action.VIEW \
      -d "https://android-sdk.godetour.link/nkeFLNfFBf/products/42" \
-     com.detour.example
+     com.swmansion.detour.example
    ```
    - Status updates and app navigates to `ProductActivity`. Type shows `UNIVERSAL`.
    - A `ReEngage` event with `source=universal` is logged. A `ViewItem` event is logged in `ProductActivity`.
@@ -37,7 +37,7 @@ This example demonstrates a full integration of `com.detour:detour-sdk` using `D
    ```shell
    adb shell am start -a android.intent.action.VIEW \
      -d "detour-example-app://products/42" \
-     com.detour.example
+     com.swmansion.detour.example
    ```
    - Same navigation result but type shows `SCHEME`. A `ReEngage` event with `source=scheme` is logged.
 5) For deferred link testing: uninstall the app, copy a Detour link from the Dashboard, then install and launch — the deferred link should resolve on first open and a `ReEngage` event with `source=deferred` is logged.
@@ -64,7 +64,7 @@ The SDK parses the URI as `/<host><path>` — so `detour-example-app://products/
 ## Quick start
 
 1. Configure this app in the [Detour Dashboard](https://godetour.dev). You'll need two values:
-   - **Package name:** `com.detour.example` (from `AndroidManifest.xml`)
+   - **Package name:** `swmansion.example` (from `AndroidManifest.xml`)
    - **SHA256 certificate fingerprint** — run this to get it from your debug keystore:
      ```shell
      keytool -list -v \
