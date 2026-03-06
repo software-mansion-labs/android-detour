@@ -11,10 +11,10 @@ enum class LinkType {
     DEFERRED,
 
     /**
-     * Universal App Link - user clicked link with app already installed.
-     * Handled directly by Android Intent system (http/https).
+     * Verified App Link - user clicked an http/https link with the app already installed.
+     * Domain ownership is verified via Digital Asset Links (Android App Links).
      */
-    UNIVERSAL,
+    VERIFIED,
 
     /**
      * Custom scheme deep link (e.g. myapp://product/123).

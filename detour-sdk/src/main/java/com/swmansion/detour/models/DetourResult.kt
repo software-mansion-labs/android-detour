@@ -12,7 +12,7 @@ sealed class LinkResult {
      * @property url Full URL that was matched or opened
      * @property route Extracted route for navigation (path + query, first segment stripped)
      * @property pathname Route path without query string
-     * @property type Source of the link (DEFERRED, UNIVERSAL, or SCHEME)
+     * @property type Source of the link (DEFERRED, VERIFIED, or SCHEME)
      * @property params Parsed query parameters from the URL
      */
     data class Success(

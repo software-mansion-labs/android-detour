@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
                 val route = result.route        // Extracted route for navigation
                 val pathname = result.pathname  // Route path without query string
                 val params = result.params      // Parsed query parameters
-                val type = result.type          // DEFERRED, UNIVERSAL, or SCHEME
+                val type = result.type          // DEFERRED, VERIFIED, or SCHEME
 
                 navigateToRoute(route)
             }
@@ -145,7 +145,7 @@ sealed class LinkResult {
         val url: String,                       // Full URL that was matched
         val route: String,                     // Extracted route for navigation
         val pathname: String,                  // Route path without query string
-        val type: LinkType,                    // DEFERRED, UNIVERSAL, or SCHEME
+        val type: LinkType,                    // DEFERRED, VERIFIED, or SCHEME
         val params: Map<String, String>        // Parsed query parameters
     ) : LinkResult()
 
@@ -162,7 +162,7 @@ Type of deep link:
 ```kotlin
 enum class LinkType {
     DEFERRED,   // User clicked link before app was installed
-    UNIVERSAL,  // Universal App Link (http/https)
+    VERIFIED,   // Verified App Link — http/https link, domain ownership verified via Digital Asset Links
     SCHEME      // Custom scheme deep link (e.g. myapp://...)
 }
 ```

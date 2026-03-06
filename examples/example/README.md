@@ -31,8 +31,8 @@ This example demonstrates a full integration of `com.swmansion:detour-sdk` using
      -d "https://android-sdk.godetour.link/nkeFLNfFBf/products/42" \
      com.swmansion.detour.example
    ```
-   - Status updates and app navigates to `ProductActivity`. Type shows `UNIVERSAL`.
-   - A `ReEngage` event with `source=universal` is logged. A `ViewItem` event is logged in `ProductActivity`.
+   - Status updates and app navigates to `ProductActivity`. Type shows `VERIFIED`.
+   - A `ReEngage` event with `source=verified` is logged. A `ViewItem` event is logged in `ProductActivity`.
 4) Trigger a custom scheme link:
    ```shell
    adb shell am start -a android.intent.action.VIEW \

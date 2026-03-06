@@ -30,7 +30,7 @@ import com.swmansion.detour.utils.UrlHelpers
  * )
  * Detour.initialize(context, config)
  *
- * // Process any link (Universal, Scheme, or Deferred) in onCreate()
+ * // Process any link (Verified, Scheme, or Deferred) in onCreate()
  * lifecycleScope.launch {
  *     when (val result = Detour.processLink(intent)) {
  *         is LinkResult.Success -> {
@@ -209,7 +209,7 @@ object Detour {
                     url = shortLinkResult.link,
                     route = route,
                     pathname = UrlHelpers.extractPathname(route),
-                    type = LinkType.UNIVERSAL,
+                    type = LinkType.VERIFIED,
                     params = UrlHelpers.parseQueryParams(shortLinkResult.link)
                 )
             }
@@ -221,7 +221,7 @@ object Detour {
             url = link,
             route = route,
             pathname = UrlHelpers.extractPathname(route),
-            type = LinkType.UNIVERSAL,
+            type = LinkType.VERIFIED,
             params = UrlHelpers.parseQueryParams(link)
         )
     }

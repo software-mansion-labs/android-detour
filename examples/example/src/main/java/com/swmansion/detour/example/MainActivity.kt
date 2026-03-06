@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
 
                 when (result.type) {
                     LinkType.DEFERRED -> Log.d(TAG, "Deferred link click detected")
-                    LinkType.UNIVERSAL -> Log.d(TAG, "Universal link click detected")
+                    LinkType.VERIFIED -> Log.d(TAG, "Verified link click detected")
                     LinkType.SCHEME -> Log.d(TAG, "Scheme link click detected")
                 }
 
