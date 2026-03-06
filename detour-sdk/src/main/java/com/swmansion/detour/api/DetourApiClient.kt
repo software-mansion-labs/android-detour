@@ -95,7 +95,7 @@ internal class DetourApiClient(private val config: DetourConfig) {
 
     companion object {
         private const val TAG = "DetourApiClient"
-        private const val MATCH_LINK_URL = "https://godetour.app/api/link/match-link?x-vercel-protection-bypass=A1ExaSL8IV1vYSp4v3evENzjHbXOscfr"
-        private const val RESOLVE_SHORT_URL = "https://godetour.app/api/link/resolve-short?x-vercel-protection-bypass=A1ExaSL8IV1vYSp4v3evENzjHbXOscfr"
+        private const val MATCH_LINK_URL = "https://godetour.dev/api/link/match-link"
+        private const val RESOLVE_SHORT_URL = "https://godetour.dev/api/link/resolve-short"
     }
 }

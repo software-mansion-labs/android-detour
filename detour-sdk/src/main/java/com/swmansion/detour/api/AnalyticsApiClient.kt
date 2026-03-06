@@ -100,7 +100,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
 
     companion object {
         private const val TAG = "AnalyticsApiClient"
-        private const val EVENT_URL = "https://godetour.app/api/analytics/event?x-vercel-protection-bypass=A1ExaSL8IV1vYSp4v3evENzjHbXOscfr"
-        private const val RETENTION_URL = "https://godetour.app/api/analytics/retention?x-vercel-protection-bypass=A1ExaSL8IV1vYSp4v3evENzjHbXOscfr"
+        private const val EVENT_URL = "https://godetour.dev/api/analytics/event"
+        private const val RETENTION_URL = "https://godetour.dev/api/analytics/retention"
     }
 }
