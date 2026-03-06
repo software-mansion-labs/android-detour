@@ -8,7 +8,6 @@ import com.swmansion.detour.storage.DetourStorage
  *
  * @property apiKey Your API key from the Detour dashboard
  * @property appId Your application ID from the Detour dashboard
- * @property shouldUseClipboard Whether to check clipboard for links on first launch (default: true)
  * @property linkProcessingMode Controls which link sources are handled (default: [LinkProcessingMode.ALL])
  * @property storage Custom storage implementation for persisting SDK data.
  *                   Defaults to SharedPreferences-based storage.
@@ -16,7 +15,6 @@ import com.swmansion.detour.storage.DetourStorage
 data class DetourConfig(
     val apiKey: String,
     val appId: String,
-    val shouldUseClipboard: Boolean = true,
     val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
     val storage: DetourStorage? = null
 ) {
@@ -25,24 +23,20 @@ data class DetourConfig(
      *
      * ```java
      * DetourConfig config = new DetourConfig.Builder("apiKey", "appId")
-     *     .shouldUseClipboard(false)
      *     .linkProcessingMode(LinkProcessingMode.WEB_ONLY)
      *     .build();
      * ```
      */
     class Builder(private val apiKey: String, private val appId: String) {
-        private var shouldUseClipboard: Boolean = true
         private var linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL
         private var storage: DetourStorage? = null
 
-        fun shouldUseClipboard(value: Boolean) = apply { shouldUseClipboard = value }
         fun linkProcessingMode(value: LinkProcessingMode) = apply { linkProcessingMode = value }
         fun storage(value: DetourStorage) = apply { storage = value }
 
         fun build(): DetourConfig = DetourConfig(
             apiKey = apiKey,
             appId = appId,
-            shouldUseClipboard = shouldUseClipboard,
             linkProcessingMode = linkProcessingMode,
             storage = storage
         )

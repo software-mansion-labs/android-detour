@@ -276,7 +276,7 @@ object Detour {
             apiClient.matchLink(fingerprint)
         } else {
             Log.d(TAG, "The click_id not found, using probabilistic matching")
-            val fingerprint = fingerprintCollector.collectFingerprint(config.shouldUseClipboard)
+            val fingerprint = fingerprintCollector.collectFingerprint()
             apiClient.matchLink(fingerprint)
         }
 

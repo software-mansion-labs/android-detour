@@ -1,6 +1,5 @@
 package com.swmansion.detour.fingerprint
 
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.Resources
 import android.os.Build
@@ -20,8 +19,12 @@ internal class FingerprintCollector(private val context: Context) {
 
     /**
      * Collect probabilistic device fingerprint.
+     *
+     * Note: clipboard is not read on Android — it triggers a system toast notification
+     * and is restricted to foreground apps. Deferred matching relies on IP, device model,
+     * screen dimensions, timezone, and language instead.
      */
-    suspend fun collectFingerprint(shouldUseClipboard: Boolean): ProbabilisticFingerprint =
+    suspend fun collectFingerprint(): ProbabilisticFingerprint =
         withContext(Dispatchers.IO) {
             val (width, height, density) = getScreenMetrics()
             val locale = Locale.getDefault()
@@ -39,7 +42,7 @@ internal class FingerprintCollector(private val context: Context) {
                 timezone = timezone.id,
                 userAgent = getUserAgent(),
                 timestamp = System.currentTimeMillis(),
-                pastedLink = if (shouldUseClipboard) getClipboardContent() else null
+                pastedLink = null
             )
         }
 
@@ -51,31 +54,25 @@ internal class FingerprintCollector(private val context: Context) {
             if (wm != null) {
                 val bounds = wm.currentWindowMetrics.bounds
                 val density = Resources.getSystem().displayMetrics.density
-                return ScreenMetrics(bounds.width(), bounds.height(), density)
+                return ScreenMetrics(
+                    (bounds.width() / density).toInt(),
+                    (bounds.height() / density).toInt(),
+                    density
+                )
             }
         }
 
         val dm: DisplayMetrics = Resources.getSystem().displayMetrics
-        return ScreenMetrics(dm.widthPixels, dm.heightPixels, dm.density)
+        return ScreenMetrics(
+            (dm.widthPixels / dm.density).toInt(),
+            (dm.heightPixels / dm.density).toInt(),
+            dm.density
+        )
     }
 
     private fun getUserAgent(): String? {
         return try {
             System.getProperty("http.agent")
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun getClipboardContent(): String? {
-        return try {
-            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            val clipData = clipboardManager?.primaryClip
-            if (clipData != null && clipData.itemCount > 0) {
-                clipData.getItemAt(0)?.text?.toString()
-            } else {
-                null
-            }
         } catch (_: Exception) {
             null
         }

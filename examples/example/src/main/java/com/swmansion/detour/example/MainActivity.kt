@@ -33,7 +33,6 @@ class MainActivity : AppCompatActivity() {
             config = DetourConfig(
                 apiKey = BuildConfig.DETOUR_API_KEY,
                 appId = BuildConfig.DETOUR_APP_ID,
-                shouldUseClipboard = true,
                 // LinkProcessingMode controls which link sources the SDK handles:
                 //   ALL           – Universal Links + custom schemes + deferred (default)
                 //   WEB_ONLY      – Universal Links + deferred, ignores custom schemes
