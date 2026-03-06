@@ -119,9 +119,6 @@ data class DetourConfig(
     /** Your application ID from the Detour dashboard. */
     val appId: String,
 
-    /** Check clipboard for deferred links on first launch (default: true). */
-    val shouldUseClipboard: Boolean = true,
-
     /**
      * Controls which link sources are handled by the SDK (default: ALL).
      * - ALL: deferred + Universal/App Links + custom scheme links

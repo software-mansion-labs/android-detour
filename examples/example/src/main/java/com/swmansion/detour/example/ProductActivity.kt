@@ -1,5 +1,6 @@
 package com.swmansion.detour.example
 
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.swmansion.detour.example.databinding.ActivityProductBinding
@@ -16,7 +17,21 @@ class ProductActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         val productId = intent.getStringExtra("productId") ?: "unknown"
-        binding.productText.text = "Product ID: $productId"
+
+        @Suppress("UNCHECKED_CAST", "DEPRECATION")
+        val params: Map<String, String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getSerializableExtra("params", HashMap::class.java) as? HashMap<String, String>
+        } else {
+            intent.getSerializableExtra("params") as? HashMap<String, String>
+        } ?: emptyMap()
+
+        binding.productText.text = buildString {
+            append("Product ID: $productId")
+            if (params.isNotEmpty()) {
+                append("\n\nQuery params:\n")
+                params.forEach { (key, value) -> append("$key: $value\n") }
+            }
+        }.trimEnd()
 
         // --- Analytics: log a ViewItem event ---
         DetourAnalytics.logEvent(

@@ -78,10 +78,18 @@ internal object UrlHelpers {
         val path = uri.path.orEmpty()
         val query = uri.query
 
+        val hostPart = if (host.isBlank()) "" else "/$host"
+        val pathPart = when {
+            path.isBlank() -> ""
+            path.startsWith("/") -> path
+            else -> "/$path"
+        }
+        val baseRoute = if (hostPart.isBlank() && pathPart.isBlank()) "/" else "$hostPart$pathPart"
+
         return if (query.isNullOrBlank()) {
-            "/$host$path"
+            baseRoute
         } else {
-            "/$host$path?$query"
+            "$baseRoute?$query"
         }
     }
 

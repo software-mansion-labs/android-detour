@@ -17,6 +17,7 @@ import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.FirstLaunchDetector
 import com.swmansion.detour.utils.UrlHelpers
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Main entry point for Detour SDK.
@@ -51,8 +52,7 @@ object Detour {
     @Volatile
     private var isInitialized = false
 
-    @Volatile
-    private var sessionHandled = false
+    private val sessionHandled = AtomicBoolean(false)
 
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
@@ -249,13 +249,11 @@ object Detour {
      * Process Deferred Deep Link via API.
      */
     private suspend fun processDeferredLink(): LinkResult {
-        // Prevent duplicate API calls in same session
-        if (sessionHandled) {
+        // Prevent duplicate API calls in same session (atomic guard).
+        if (!sessionHandled.compareAndSet(false, true)) {
             Log.d(TAG, "Session already handled")
             return LinkResult.NotFirstLaunch
         }
-
-        sessionHandled = true
 
         // Check if first launch
         if (!firstLaunchDetector.isFirstLaunch()) {

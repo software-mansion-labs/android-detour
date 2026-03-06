@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
             val result = Detour.getDeferredLink()
             handleResult(result)
         }
+
     }
 
     private fun handleResult(result: LinkResult) {
@@ -76,7 +77,7 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "Deferred link: ${result.url}")
                 val intent = Intent(this, DeepLinkDestinationActivity::class.java).apply {
                     putExtra(DeepLinkDestinationActivity.EXTRA_ROUTE, result.route)
-                    putExtra(DeepLinkDestinationActivity.EXTRA_PARAMS, result.params.toString())
+                    putExtra(DeepLinkDestinationActivity.EXTRA_PARAMS, HashMap(result.params))
                 }
                 TaskStackBuilder.create(this)
                     .addNextIntentWithParentStack(intent)

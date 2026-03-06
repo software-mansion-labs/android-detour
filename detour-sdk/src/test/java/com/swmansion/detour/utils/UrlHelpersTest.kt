@@ -138,6 +138,12 @@ class UrlHelpersTest {
         assertEquals("/home", UrlHelpers.getRouteFromDeepLink(uri))
     }
 
+    @Test
+    fun `getRouteFromDeepLink - hostless URI keeps single leading slash`() {
+        val uri = Uri.parse("myapp:///product/123?color=red")
+        assertEquals("/product/123?color=red", UrlHelpers.getRouteFromDeepLink(uri))
+    }
+
     // --- parseQueryParams ---
 
     @Test

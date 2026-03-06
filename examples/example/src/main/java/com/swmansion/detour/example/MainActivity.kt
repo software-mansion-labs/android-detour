@@ -73,7 +73,8 @@ class MainActivity : AppCompatActivity() {
                     append("Route: ${result.route}\n")
                     append("Pathname: ${result.pathname}\n")
                     if (result.params.isNotEmpty()) {
-                        append("Params: ${result.params}\n")
+                        append("Query params:\n")
+                        result.params.forEach { (key, value) -> append("$key: $value\n") }
                     }
                 }
 
@@ -96,7 +97,7 @@ class MainActivity : AppCompatActivity() {
                     LinkType.SCHEME -> Log.d(TAG, "Scheme link click detected")
                 }
 
-                navigateToRoute(result.route)
+                navigateToRoute(result.route, result.params)
             }
 
             is LinkResult.NotFirstLaunch -> {
@@ -118,13 +119,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun navigateToRoute(route: String) {
+    private fun navigateToRoute(route: String, params: Map<String, String> = emptyMap()) {
         when {
             route.startsWith("/products/") -> {
                 val productId = route.removePrefix("/products/").split("?").first().trim('/')
                 if (productId.isNotEmpty()) {
                     startActivity(Intent(this, ProductActivity::class.java).apply {
                         putExtra("productId", productId)
+                        putExtra("params", HashMap(params))
                     })
                 }
             }

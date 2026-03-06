@@ -1,5 +1,6 @@
 package com.swmansion.detour.example.deferred
 
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.swmansion.detour.example.deferred.databinding.ActivityDeepLinkDestinationBinding
@@ -23,11 +24,21 @@ class DeepLinkDestinationActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         val route = intent.getStringExtra(EXTRA_ROUTE) ?: "/"
-        val params = intent.getStringExtra(EXTRA_PARAMS)
+
+        @Suppress("UNCHECKED_CAST", "DEPRECATION")
+        val params: Map<String, String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getSerializableExtra(EXTRA_PARAMS, HashMap::class.java) as? HashMap<String, String>
+        } else {
+            intent.getSerializableExtra(EXTRA_PARAMS) as? HashMap<String, String>
+        } ?: emptyMap()
 
         binding.routeText.text = "Route: $route"
-        if (!params.isNullOrEmpty()) {
-            binding.paramsText.text = "Params: $params"
+
+        if (params.isNotEmpty()) {
+            binding.paramsText.text = buildString {
+                append("Query params:\n")
+                params.forEach { (key, value) -> append("$key: $value\n") }
+            }.trimEnd()
         }
     }
 

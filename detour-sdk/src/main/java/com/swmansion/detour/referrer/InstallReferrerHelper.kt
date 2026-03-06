@@ -8,6 +8,7 @@ import com.android.installreferrer.api.InstallReferrerStateListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 /**
@@ -31,7 +32,22 @@ internal class InstallReferrerHelper(private val context: Context) {
 
     private suspend fun getInstallReferrer(): String? = suspendCancellableCoroutine { continuation ->
         val referrerClient = InstallReferrerClient.newBuilder(context).build()
-        
+        val completed = AtomicBoolean(false)
+
+        fun resumeOnce(value: String?) {
+            if (!completed.compareAndSet(false, true)) return
+
+            try {
+                referrerClient.endConnection()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error ending connection", e)
+            }
+
+            if (continuation.isActive) {
+                continuation.resume(value)
+            }
+        }
+
         referrerClient.startConnection(object : InstallReferrerStateListener {
             override fun onInstallReferrerSetupFinished(responseCode: Int) {
                 when (responseCode) {
@@ -39,34 +55,27 @@ internal class InstallReferrerHelper(private val context: Context) {
                         try {
                             val response = referrerClient.installReferrer
                             val referrerUrl = response.installReferrer
-                            referrerClient.endConnection()
-                            continuation.resume(referrerUrl)
+                            resumeOnce(referrerUrl)
                         } catch (e: Exception) {
                             Log.e(TAG, "Error reading install referrer", e)
-                            referrerClient.endConnection()
-                            continuation.resume(null)
+                            resumeOnce(null)
                         }
                     }
                     else -> {
                         Log.w(TAG, "Install referrer response code: $responseCode")
-                        referrerClient.endConnection()
-                        continuation.resume(null)
+                        resumeOnce(null)
                     }
                 }
             }
 
             override fun onInstallReferrerServiceDisconnected() {
                 Log.w(TAG, "Install referrer service disconnected")
-                continuation.resume(null)
+                resumeOnce(null)
             }
         })
-        
+
         continuation.invokeOnCancellation {
-            try {
-                referrerClient.endConnection()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error ending connection", e)
-            }
+            resumeOnce(null)
         }
     }
 
