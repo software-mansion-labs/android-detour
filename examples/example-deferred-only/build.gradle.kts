@@ -58,6 +58,9 @@ dependencies {
     // Detour SDK
     implementation(project(":detour-sdk"))
 
+    // Splash screen API (backport to API 23+)
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
     // Android dependencies
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

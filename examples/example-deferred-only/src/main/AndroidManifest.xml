@@ -13,7 +13,7 @@
     <activity
       android:name="com.swmansion.detour.example.deferred.MainActivity"
       android:exported="true"
-      android:theme="@style/Theme.DetourAndroidSDK">
+      android:theme="@style/Theme.DetourAndroidSDK.Splash">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
@@ -26,6 +26,12 @@
       </intent-filter>
       <!-- PASTE YOUR DASHBOARD LINK CONFIGURATION HERE -->
     </activity>
+
+    <activity
+      android:name="com.swmansion.detour.example.deferred.DeepLinkDestinationActivity"
+      android:exported="false"
+      android:parentActivityName="com.swmansion.detour.example.deferred.MainActivity"
+      android:theme="@style/Theme.DetourAndroidSDK" />
 
   </application>
 

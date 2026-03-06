@@ -4,4 +4,11 @@
     </style>
 
     <style name="Theme.DetourAndroidSDK" parent="Base.Theme.DetourAndroidSDK" />
+
+    <!-- Splash screen theme: shown while getDeferredLink() resolves -->
+    <style name="Theme.DetourAndroidSDK.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/primary</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.DetourAndroidSDK</item>
+    </style>
 </resources>
