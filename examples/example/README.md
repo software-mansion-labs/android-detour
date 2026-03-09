@@ -1,6 +1,6 @@
 # Detour Android SDK — Full Example
 
-This example demonstrates a full integration of `com.swmansion:detour-sdk` using `DetourDelegate` and `LinkProcessingMode.ALL`.
+This example demonstrates a full integration of `com.swmansion:detour` using `DetourDelegate` and `LinkProcessingMode.ALL`.
 
 ## Scenario represented
 

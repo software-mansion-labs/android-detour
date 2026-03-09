@@ -63,7 +63,7 @@ afterEvaluate {
             create<MavenPublication>("release") {
                 from(components["release"])
                 groupId = "com.swmansion"
-                artifactId = "swmansion-detour"
+                artifactId = "detour"
                 version = "0.1.0"
 
                 pom {
