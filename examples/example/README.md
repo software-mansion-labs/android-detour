@@ -25,10 +25,10 @@ This example demonstrates a full integration of `com.swmansion:detour` using `De
 
 1) Start the app on a device or emulator.
 2) You land on `MainActivity` — status shows "No deep link detected".
-3) Trigger a Universal Link:
+3) Trigger the App Link by opening the link on the device — Android will open the app directly if App Links are configured. Alternatively, use following command:
    ```shell
    adb shell am start -a android.intent.action.VIEW \
-     -d "https://android-sdk.godetour.link/nkeFLNfFBf/products/42" \
+     -d "https://<your-link-domain>/products/42" \
      com.swmansion.detour.example
    ```
    - Status updates and app navigates to `ProductActivity`. Type shows `VERIFIED`.
