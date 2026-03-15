@@ -69,7 +69,7 @@ afterEvaluate {
                 pom {
                     name.set("Detour Android SDK")
                     description.set("SDK for handling deferred deep links on Android")
-                    url.set("https://github.com/software-mansion-labs/detour-android-sdk")
+                    url.set("https://github.com/software-mansion-labs/android-detour")
 
                     licenses {
                         license {
@@ -87,9 +87,9 @@ afterEvaluate {
                     }
 
                     scm {
-                        connection.set("scm:git:git://github.com/software-mansion-labs/swmansion-android-detour.git")
-                        developerConnection.set("scm:git:ssh://github.com/software-mansion-labs/swmansion-android-detour.git")
-                        url.set("https://github.com/software-mansion-labs/detour-android-sdk")
+                        connection.set("scm:git:git://github.com/software-mansion-labs/android-detour.git")
+                        developerConnection.set("scm:git:ssh://github.com/software-mansion-labs/android-detour.git")
+                        url.set("https://github.com/software-mansion-labs/android-detour")
                     }
                 }
             }

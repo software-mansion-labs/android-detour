@@ -64,7 +64,7 @@ The SDK parses the URI as `/<host><path>` — so `detour-example-app://products/
 ## Quick start
 
 1. Configure this app in the [Detour Dashboard](https://godetour.dev). You'll need two values:
-   - **Package name:** `swmansion.example` (from `AndroidManifest.xml`)
+   - **Package name:** `com.swmansion.detour.example` (from `applicationId` in `build.gradle.kts`)
    - **SHA256 certificate fingerprint** — run this to get it from your debug keystore:
      ```shell
      keytool -list -v \

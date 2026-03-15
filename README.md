@@ -8,6 +8,14 @@ Android SDK for handling deferred deep links
 
 Check out our dedicated documentation page for info about this library, API reference and more: [https://docs.swmansion.com/detour/docs/](https://docs.swmansion.com/detour/docs/)
 
+## Other Detour SDKs
+
+Detour is also available for other app stacks:
+
+- iOS SDK: [https://github.com/software-mansion-labs/ios-detour](https://github.com/software-mansion-labs/ios-detour)
+- Flutter SDK: [https://github.com/software-mansion-labs/detour-flutter-plugin](https://github.com/software-mansion-labs/detour-flutter-plugin)
+- React Native SDK: [https://github.com/software-mansion-labs/react-native-detour](https://github.com/software-mansion-labs/react-native-detour)
+
 ## Create account on platform
 
 Create account and configure your links: [https://godetour.dev/auth/signup](https://godetour.dev/auth/signup)
