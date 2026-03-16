@@ -19,7 +19,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "detour-android-sdk"
+rootProject.name = "com.swmansion.detour"
 include(":detour-sdk")
 include(":examples:example")
 include(":examples:example-deferred-only")
