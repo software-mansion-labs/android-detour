@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.vanniktech.maven.publish)
 }
 
+group = "com.swmansion.detour"
 version = "1.0.0"
 
 android {
