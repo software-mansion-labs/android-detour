@@ -1,8 +1,10 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
-    id("maven-publish")
+    alias(libs.plugins.vanniktech.maven.publish)
 }
+
+version = "1.0.0"
 
 android {
     namespace = "com.swmansion.detour"
@@ -32,13 +34,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-            withJavadocJar()
-        }
-    }
 }
 
 dependencies {
@@ -57,41 +52,29 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                from(components["release"])
-                groupId = "com.swmansion"
-                artifactId = "detour"
-                version = "0.1.0"
-
-                pom {
-                    name.set("Detour Android SDK")
-                    description.set("SDK for handling deferred deep links on Android")
-                    url.set("https://github.com/software-mansion-labs/android-detour")
-
-                    licenses {
-                        license {
-                            name.set("MIT License")
-                            url.set("https://opensource.org/licenses/MIT")
-                        }
-                    }
-
-                    developers {
-                        developer {
-                            id.set("swmansion")
-                            name.set("Software Mansion")
-                            email.set("contact@godetour.com")
-                        }
-                    }
-
-                    scm {
-                        connection.set("scm:git:git://github.com/software-mansion-labs/android-detour.git")
-                        developerConnection.set("scm:git:ssh://github.com/software-mansion-labs/android-detour.git")
-                        url.set("https://github.com/software-mansion-labs/android-detour")
-                    }
-                }
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+    pom {
+        name = "Detour Android SDK"
+        description = "SDK for handling deferred deep links on Android."
+        url = "https://github.com/software-mansion-labs/android-detour"
+        licenses {
+            license {
+                name = "The MIT License"
+                url = "http://www.opensource.org/licenses/mit-license.php"
+            }
+        }
+        scm {
+            connection = "scm:git:git://github.com/software-mansion-labs/android-detour.git"
+            developerConnection = "scm:git:ssh://github.com/software-mansion-labs/android-detour.git"
+            url = "https://github.com/software-mansion-labs/android-detour"
+        }
+        developers {
+            developer {
+                id = "swmansion"
+                name = "Software Mansion"
+                email = "contact@godetour.dev"
             }
         }
     }
