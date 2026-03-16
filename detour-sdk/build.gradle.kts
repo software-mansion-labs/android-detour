@@ -53,6 +53,7 @@ dependencies {
 }
 
 mavenPublishing {
+    coordinates("com.swmansion.detour", "detour-android-sdk", version.toString())
     publishToMavenCentral()
     signAllPublications()
     pom {
