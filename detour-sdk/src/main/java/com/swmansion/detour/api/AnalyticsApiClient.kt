@@ -1,6 +1,7 @@
 package com.swmansion.detour.api
 
 import android.util.Log
+import com.swmansion.detour.BuildConfig
 import com.swmansion.detour.DetourConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -49,6 +50,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Authorization", "Bearer ${config.apiKey}")
                     .addHeader("X-App-ID", config.appId)
+                    .addHeader("X-SDK", BuildConfig.SDK_HEADER_VALUE)
                     .build()
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->
@@ -86,6 +88,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Authorization", "Bearer ${config.apiKey}")
                     .addHeader("X-App-ID", config.appId)
+                    .addHeader("X-SDK", BuildConfig.SDK_HEADER_VALUE)
                     .build()
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->

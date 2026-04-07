@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
+import com.swmansion.detour.analytics.DetourEventNames
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.fingerprint.FingerprintCollector
 import com.swmansion.detour.models.DeterministicFingerprint
@@ -197,6 +198,10 @@ object Detour {
         Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
+        DetourAnalytics.logEvent(
+            DetourEventNames.OpenedViaUniversalLink,
+            mapOf("url" to link)
+        )
 
         // Short link resolution: single-segment path indicates a short link
         if (UrlHelpers.isSingleSegmentPath(uri)) {

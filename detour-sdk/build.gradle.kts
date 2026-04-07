@@ -5,6 +5,7 @@ plugins {
 }
 
 version = "1.0.0"
+val sdkVersion = project.version.toString()
 
 android {
     namespace = "com.swmansion.detour"
@@ -14,6 +15,8 @@ android {
         minSdk = 21
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+        buildConfigField("String", "SDK_VERSION", "\"$sdkVersion\"")
+        buildConfigField("String", "SDK_HEADER_VALUE", "\"android/$sdkVersion\"")
     }
 
     buildTypes {
@@ -24,6 +27,10 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
