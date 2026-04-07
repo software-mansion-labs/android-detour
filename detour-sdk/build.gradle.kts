@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.vanniktech.maven.publish)
 }
 
-version = "1.0.0"
+version = "1.0.1"
 val sdkVersion = project.version.toString()
 
 android {
