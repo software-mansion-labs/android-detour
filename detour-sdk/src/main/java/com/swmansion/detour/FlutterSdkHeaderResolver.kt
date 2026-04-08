@@ -1,3 +1,9 @@
+// CONTRACT: The Flutter plugin (detour-flutter-plugin) ships a marker class
+// at exactly "com.swmansion.detour.DetourFlutterMarker" with a static field
+// "SDK_HEADER_VALUE". If either name changes, this lookup silently fails and
+// Flutter apps will be reported as native Android.
+// Counterpart: detour-flutter-plugin/android/src/main/kotlin/.../DetourFlutterMarker.kt
+
 package com.swmansion.detour
 
 internal object FlutterSdkHeaderResolver {
