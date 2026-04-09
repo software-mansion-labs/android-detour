@@ -2,6 +2,7 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.FlutterSdkHeaderResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -49,6 +50,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Authorization", "Bearer ${config.apiKey}")
                     .addHeader("X-App-ID", config.appId)
+                    .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
                     .build()
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->
@@ -86,6 +88,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Authorization", "Bearer ${config.apiKey}")
                     .addHeader("X-App-ID", config.appId)
+                    .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
                     .build()
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->

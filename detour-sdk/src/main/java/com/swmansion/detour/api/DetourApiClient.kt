@@ -2,6 +2,7 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.FlutterSdkHeaderResolver
 import com.swmansion.detour.models.DeviceFingerprint
 import com.swmansion.detour.models.LinkMatchResponse
 import com.swmansion.detour.models.ShortLinkResponse
@@ -32,6 +33,7 @@ internal class DetourApiClient(private val config: DetourConfig) {
             .addHeader("Content-Type", "application/json")
             .addHeader("Authorization", "Bearer ${config.apiKey}")
             .addHeader("X-App-ID", config.appId)
+            .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
             .build()
 
         HttpClient.okHttp.newCall(request).execute().use { response ->
@@ -71,6 +73,7 @@ internal class DetourApiClient(private val config: DetourConfig) {
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Authorization", "Bearer ${config.apiKey}")
                 .addHeader("X-App-ID", config.appId)
+                .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
                 .build()
 
             HttpClient.okHttp.newCall(request).execute().use { response ->

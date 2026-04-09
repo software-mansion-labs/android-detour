@@ -23,5 +23,6 @@ enum class DetourEventNames(val eventName: String) {
     ViewItem("view_item"),
     BeginCheckout("begin_checkout"),
     Purchase("purchase"),
-    AdImpression("ad_impression")
+    AdImpression("ad_impression"),
+    OpenedViaUniversalLink("opened_via_universal_link")
 }
