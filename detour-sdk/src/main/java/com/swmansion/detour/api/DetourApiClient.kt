@@ -96,9 +96,72 @@ internal class DetourApiClient(private val config: DetourConfig) {
         }
     }
 
+    private data class UniversalLinkClickResponse(
+        val allowed: Boolean?,
+        val clickId: String?,
+        val error: String?,
+        val code: String?,
+        val clicksInPeriod: Int?,
+        val effectiveLimit: Int?
+    )
+
+    data class UniversalLinkClickResult(
+        val allowed: Boolean,
+        val clickId: String? = null,
+        val error: String? = null,
+        val code: String? = null,
+        val clicksInPeriod: Int? = null,
+        val effectiveLimit: Int? = null
+    )
+
+    suspend fun sendUniversalLinkClick(url: String): UniversalLinkClickResult = withContext(Dispatchers.IO) {
+        try {
+            val payload = HttpClient.gson.toJson(mapOf(
+                "url" to url,
+                "timestamp" to System.currentTimeMillis()
+            ))
+            val request = Request.Builder()
+                .url(UNIVERSAL_LINK_CLICK_URL)
+                .post(payload.toRequestBody(HttpClient.JSON))
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Authorization", "Bearer ${config.apiKey}")
+                .addHeader("X-App-ID", config.appId)
+                .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+                .build()
+
+            HttpClient.okHttp.newCall(request).execute().use { response ->
+                val bodyString = try { response.body?.string() } catch (e: Exception) { null }
+                val parsed = bodyString?.let {
+                    runCatching {
+                        HttpClient.gson.fromJson(it, UniversalLinkClickResponse::class.java)
+                    }.getOrNull()
+                }
+
+                val isExplicitDeny = parsed?.allowed == false || response.code == 402
+                if (isExplicitDeny) {
+                    return@use UniversalLinkClickResult(
+                        allowed = false,
+                        error = parsed?.error ?: "Click limit exceeded",
+                        code = parsed?.code,
+                        clicksInPeriod = parsed?.clicksInPeriod,
+                        effectiveLimit = parsed?.effectiveLimit
+                    )
+                }
+
+                // Fail-open for temporary backend/network issues so apps keep working.
+                UniversalLinkClickResult(allowed = true, clickId = parsed?.clickId)
+            }
+        } catch (e: Exception) {
+            // Fail-open on transport errors; limit enforcement only happens on explicit deny.
+            Log.w(TAG, "[Detour:NETWORK_ERROR] sendUniversalLinkClick failed, allowing through", e)
+            UniversalLinkClickResult(allowed = true)
+        }
+    }
+
     companion object {
         private const val TAG = "DetourApiClient"
         private const val MATCH_LINK_URL = "https://godetour.dev/api/link/match-link"
         private const val RESOLVE_SHORT_URL = "https://godetour.dev/api/link/resolve-short"
+        private const val UNIVERSAL_LINK_CLICK_URL = "https://godetour.dev/api/link/universal-link-click"
     }
 }
