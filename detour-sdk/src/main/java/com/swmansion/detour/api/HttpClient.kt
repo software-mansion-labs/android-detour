@@ -21,6 +21,11 @@ internal object HttpClient {
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
+    // Shared connection pool, tighter call timeout for link-gate requests.
+    val shortTimeoutOkHttp: OkHttpClient = okHttp.newBuilder()
+        .callTimeout(5, TimeUnit.SECONDS)
+        .build()
+
     val gson: Gson = Gson()
 
     val JSON: MediaType = "application/json; charset=utf-8".toMediaType()

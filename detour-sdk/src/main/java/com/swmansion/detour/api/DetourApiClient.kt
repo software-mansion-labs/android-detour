@@ -1,5 +1,7 @@
 package com.swmansion.detour.api
 
+import android.content.Context
+import android.os.Build
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.FlutterSdkHeaderResolver
@@ -15,7 +17,7 @@ import java.io.IOException
 /**
  * API client for Detour link-matching and short-link resolution.
  */
-internal class DetourApiClient(private val config: DetourConfig) {
+internal class DetourApiClient(private val config: DetourConfig, private val context: Context) {
 
     /**
      * Match link using fingerprint data.
@@ -114,12 +116,16 @@ internal class DetourApiClient(private val config: DetourConfig) {
         val effectiveLimit: Int? = null
     )
 
-    suspend fun sendUniversalLinkClick(url: String): UniversalLinkClickResult = withContext(Dispatchers.IO) {
+    suspend fun sendUniversalLinkClick(url: String, params: Map<String, String> = emptyMap()): UniversalLinkClickResult = withContext(Dispatchers.IO) {
         try {
-            val payload = HttpClient.gson.toJson(mapOf(
+            val body = mutableMapOf<String, Any>(
                 "url" to url,
-                "timestamp" to System.currentTimeMillis()
-            ))
+                "timestamp" to System.currentTimeMillis(),
+                "platform" to "android",
+                "metadata" to buildMetadata()
+            )
+            if (params.isNotEmpty()) body["params"] = params
+            val payload = HttpClient.gson.toJson(body)
             val request = Request.Builder()
                 .url(UNIVERSAL_LINK_CLICK_URL)
                 .post(payload.toRequestBody(HttpClient.JSON))
@@ -129,7 +135,7 @@ internal class DetourApiClient(private val config: DetourConfig) {
                 .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
                 .build()
 
-            HttpClient.okHttp.newCall(request).execute().use { response ->
+            HttpClient.shortTimeoutOkHttp.newCall(request).execute().use { response ->
                 val bodyString = try { response.body?.string() } catch (e: Exception) { null }
                 val parsed = bodyString?.let {
                     runCatching {
@@ -156,6 +162,23 @@ internal class DetourApiClient(private val config: DetourConfig) {
             Log.w(TAG, "[Detour:NETWORK_ERROR] sendUniversalLinkClick failed, allowing through", e)
             UniversalLinkClickResult(allowed = true)
         }
+    }
+
+    private fun buildMetadata(): Map<String, String?> {
+        val appVersion = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0)).versionName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }
+        }.getOrNull()
+
+        return mapOf(
+            "os_version" to Build.VERSION.RELEASE,
+            "app_version" to appVersion,
+            "device_model" to Build.MODEL
+        )
     }
 
     companion object {

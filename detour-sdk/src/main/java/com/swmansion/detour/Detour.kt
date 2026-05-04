@@ -86,7 +86,7 @@ object Detour {
         this.applicationContext = context.applicationContext
         this.config = config
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
-        this.apiClient = DetourApiClient(config)
+        this.apiClient = DetourApiClient(config, context.applicationContext)
         this.fingerprintCollector = FingerprintCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.firstLaunchDetector = FirstLaunchDetector(storage)
@@ -197,9 +197,9 @@ object Detour {
         Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
-        val clickResult = apiClient.sendUniversalLinkClick(link)
+        val clickResult = apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
         if (!clickResult.allowed) {
-            Log.e(TAG, "[Detour:CLICK_LIMIT_ERROR] Universal/App link blocked: ${clickResult.error}")
+            Log.e(TAG, "[Detour:CLICK_LIMIT_ERROR] Universal/App link blocked: url=$link error=${clickResult.error} code=${clickResult.code} clicksInPeriod=${clickResult.clicksInPeriod} effectiveLimit=${clickResult.effectiveLimit}")
             return LinkResult.NoLink
         }
 
