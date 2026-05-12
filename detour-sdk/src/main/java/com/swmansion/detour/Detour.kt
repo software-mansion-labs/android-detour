@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
-import com.swmansion.detour.analytics.DetourEventNames
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.fingerprint.FingerprintCollector
 import com.swmansion.detour.models.DeterministicFingerprint
@@ -87,7 +86,7 @@ object Detour {
         this.applicationContext = context.applicationContext
         this.config = config
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
-        this.apiClient = DetourApiClient(config)
+        this.apiClient = DetourApiClient(config, context.applicationContext)
         this.fingerprintCollector = FingerprintCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.firstLaunchDetector = FirstLaunchDetector(storage)
@@ -198,10 +197,11 @@ object Detour {
         Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
-        DetourAnalytics.logEvent(
-            DetourEventNames.OpenedViaUniversalLink,
-            mapOf("url" to link)
-        )
+        val clickResult = apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
+        if (!clickResult.allowed) {
+            Log.e(TAG, "[Detour:CLICK_LIMIT_ERROR] Universal/App link blocked: url=$link error=${clickResult.error} code=${clickResult.code} clicksInPeriod=${clickResult.clicksInPeriod} effectiveLimit=${clickResult.effectiveLimit}")
+            return LinkResult.NoLink
+        }
 
         // Short link resolution: single-segment path indicates a short link
         if (UrlHelpers.isSingleSegmentPath(uri)) {
