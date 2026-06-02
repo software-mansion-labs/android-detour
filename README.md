@@ -1,8 +1,8 @@
-<img src="https://github.com/user-attachments/assets/c965b51b-7307-477a-8d22-9c9cd6da6231" alt="React Native Detour by Software Mansion" width="100%"/>
+<img src="https://github.com/user-attachments/assets/c965b51b-7307-477a-8d22-9c9cd6da6231" alt="Detour Android SDK by Software Mansion" width="100%"/>
 
-[![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-react-native-detour-1?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-react-native-detour-1&n=1)
-[![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-react-native-detour-2?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-react-native-detour-2&n=1)
-[![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-react-native-detour-3?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-react-native-detour-3&n=1)
+[![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-android-detour-1?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-android-detour-1&n=1)
+[![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-android-detour-2?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-android-detour-2&n=1)
+[![Ad](https://revive-adserver.swmansion.com/www/images/zone-gh-android-detour-3?n=1)](https://revive-adserver.swmansion.com/www/delivery/ck.php?zoneid=zone-gh-android-detour-3&n=1)
 
 # Detour Android SDK
 
@@ -51,6 +51,7 @@ Initialize the SDK and use `DetourDelegate` in your Activity:
 <summary>Usage example</summary>
 
 ```kotlin
+import android.util.Log
 import com.swmansion.detour.Detour
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.DetourDelegate
@@ -91,12 +92,12 @@ class MainActivity : AppCompatActivity() {
                 val params = result.params      // Parsed query parameters
                 val type = result.type          // DEFERRED, VERIFIED, or SCHEME
 
-                navigateToRoute(route)
+                // navigate to route
             }
             is LinkResult.NotFirstLaunch -> { /* Already processed on a previous launch */ }
             is LinkResult.NoLink -> { /* Normal app launch without any deep link */ }
             is LinkResult.Error -> {
-                Log.e(TAG, "Error processing link", result.exception)
+                Log.e("MainActivity", "Error processing link", result.exception)
             }
         }
     }
@@ -124,7 +125,7 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val result = Detour.processLink(intent)
-            handleResult(result)
+            // handle result
         }
     }
 }
@@ -275,6 +276,21 @@ enum class LinkType {
     DEFERRED,   // User clicked link before app was installed
     VERIFIED,   // App Link — http/https link with verified domain ownership
     SCHEME      // Custom scheme deep link (e.g. myapp://...)
+}
+```
+
+</details>
+
+### LinkProcessingMode
+
+<details>
+<summary>LinkProcessingMode</summary>
+
+```kotlin
+enum class LinkProcessingMode {
+    ALL,            // Deferred links + App Links + custom scheme links (default)
+    WEB_ONLY,       // Deferred links + App Links, no custom scheme links
+    DEFERRED_ONLY   // Deferred links only — no intent processing
 }
 ```
 
