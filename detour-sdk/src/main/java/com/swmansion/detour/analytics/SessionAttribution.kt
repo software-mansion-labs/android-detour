@@ -9,4 +9,8 @@ internal object SessionAttribution {
     fun setClickId(clickId: String) {
         this.clickId = clickId
     }
+
+    fun clear() {
+        clickId = null
+    }
 }

@@ -147,6 +147,8 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
 
                 val isExplicitDeny = parsed?.allowed == false || response.code == 402
                 if (isExplicitDeny) {
+                    // A blocked Detour link must not leave the previous click in place.
+                    SessionAttribution.clear()
                     return@use UniversalLinkClickResult(
                         allowed = false,
                         error = parsed?.error ?: "Click limit exceeded",
