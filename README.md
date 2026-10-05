@@ -211,6 +211,8 @@ DetourAnalytics.logRetention("week_1")
 
 </details>
 
+Events logged in a session that was opened from a Detour link (a deferred install or a Universal/App Link open) are attributed to that link automatically, so you can break them down by path and parameters (e.g. `utm_source`) in the link analytics. No extra code is needed.
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types

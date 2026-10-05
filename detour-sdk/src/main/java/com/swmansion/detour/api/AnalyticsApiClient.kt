@@ -3,6 +3,7 @@ package com.swmansion.detour.api
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.FlutterSdkHeaderResolver
+import com.swmansion.detour.analytics.SessionAttribution
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -39,6 +40,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                     put("timestamp", isoFormat.format(Date()))
                     put("platform", "android")
                     put("device_id", deviceId)
+                    SessionAttribution.clickId?.let { put("click_id", it) }
                 }
 
                 val json = HttpClient.gson.toJson(payload)
