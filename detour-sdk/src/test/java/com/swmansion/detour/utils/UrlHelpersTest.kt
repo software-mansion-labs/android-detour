@@ -77,6 +77,15 @@ class UrlHelpersTest {
     }
 
     @Test
+    fun `parseRoute - colon in path-only string stays in path or query`() {
+        assertEquals("/p?redirect=https://x.com/y", UrlHelpers.parseRoute("/hash/p?redirect=https://x.com/y"))
+        assertEquals("/product:1?x=1", UrlHelpers.parseRoute("/hash/product:1?x=1"))
+        assertEquals("/time/12:30?x=1", UrlHelpers.parseRoute("hash/time/12:30?x=1"))
+        assertEquals("/urn:isbn:123", UrlHelpers.parseRoute("/hash/urn:isbn:123"))
+        assertEquals("/p?redirect=https://x.com/y", UrlHelpers.parseRoute("//example.com/hash/p?redirect=https://x.com/y"))
+    }
+
+    @Test
     fun `parseRoute - single segment path returns root`() {
         val result = UrlHelpers.parseRoute("/app-hash")
         assertEquals("/", result)
@@ -238,6 +247,15 @@ class UrlHelpersTest {
     fun `parseQueryParams - param with empty key maps value to empty key`() {
         val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?=5&id=1")
         assertEquals(mapOf("" to "5", "id" to "1"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - colon in path-only string stays in path or query`() {
+        assertEquals(mapOf("redirect" to "https://x.com/y"), UrlHelpers.parseQueryParams("/hash/p?redirect=https://x.com/y"))
+        assertEquals(mapOf("x" to "1"), UrlHelpers.parseQueryParams("/hash/product:1?x=1"))
+        assertEquals(mapOf("x" to "1"), UrlHelpers.parseQueryParams("hash/time/12:30?x=1"))
+        assertEquals(emptyMap<String, String>(), UrlHelpers.parseQueryParams("/hash/urn:isbn:123"))
+        assertEquals(mapOf("redirect" to "https://x.com/y"), UrlHelpers.parseQueryParams("//example.com/hash/p?redirect=https://x.com/y"))
     }
 
     @Test

@@ -12,6 +12,8 @@ import java.net.URLDecoder
  */
 internal object UrlHelpers {
 
+    private val SCHEME_PREFIX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
+
     /**
      * Parse a link and extract the route for navigation.
      * Strips the first path segment (app hash) from both full URLs and path-only strings.
@@ -32,8 +34,7 @@ internal object UrlHelpers {
     internal fun parseRoute(link: String?): String? {
         if (link.isNullOrBlank()) return null
 
-        // A leading slash keeps a path-only string from being read as "scheme:..." by Uri.
-        val uri = Uri.parse(if (isWebUrl(link) || link.startsWith("/")) link else "/$link")
+        val uri = if (isWebUrl(link)) parseLink(link) else parsePath(link)
         val cleanedPath = removeFirstPathSegment(uri.encodedPath.orEmpty())
         val query = uri.encodedQuery
         return if (query.isNullOrBlank()) cleanedPath else "$cleanedPath?$query"
@@ -91,7 +92,7 @@ internal object UrlHelpers {
      * Example: `"/products/123?color=red&size=L#top"` → `{color=red, size=L}`
      */
     internal fun parseQueryParams(url: String): Map<String, String> {
-        val uri = Uri.parse(url)
+        val uri = parseLink(url)
         // Uri has no query for opaque URIs like "myapp:product?x=1", but RN reads one there.
         val query = if (uri.isOpaque) {
             uri.encodedSchemeSpecificPart.substringAfter('?', "")
@@ -143,6 +144,17 @@ internal object UrlHelpers {
      * - `"/hash"`             → `"/"`
      * - `"/"`                 → `"/"`
      */
+    private fun parseLink(link: String): Uri = when {
+        link.startsWith("//") -> Uri.parse("https:$link")
+        SCHEME_PREFIX.containsMatchIn(link) -> Uri.parse(link)
+        else -> parsePath(link)
+    }
+
+    // Uri.parse reads everything before the first ':' as the scheme, even in
+    // "/hash/p?redirect=https://x". A placeholder origin keeps that ':' in the path or query.
+    private fun parsePath(path: String): Uri =
+        Uri.parse("https://x" + if (path.startsWith("/")) path else "/$path")
+
     private fun removeFirstPathSegment(path: String): String {
         if (path.isBlank() || path == "/") return "/"
 
