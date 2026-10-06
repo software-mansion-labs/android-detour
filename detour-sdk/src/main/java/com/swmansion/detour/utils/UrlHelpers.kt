@@ -26,6 +26,7 @@ internal object UrlHelpers {
      * - `"https://example.com/hash/product/123?c=red"` → `"/product/123?c=red"`
      * - `"//example.com/hash/product/123"`               → `"/product/123"`
      * - `"/hash/product/123?c=red"`                     → `"/product/123?c=red"`
+     * - `"/hash/product/123?c=red#top"`                 → `"/product/123?c=red"`
      * - `"hash/product/123"`                            → `"/product/123"`
      * - `"/hash"`                                       → `"/"`
      *
@@ -44,8 +45,10 @@ internal object UrlHelpers {
                     if (query.isNullOrBlank()) cleanedPath else "$cleanedPath?$query"
                 }
                 else -> {
-                    // Path-only string — still strip the first segment (app hash)
-                    val path = if (link.startsWith("/")) link else "/$link"
+                    // Path-only string — still strip the first segment (app hash).
+                    // Drop the fragment, as java.net.URL does for full URLs above.
+                    val withoutFragment = link.substringBefore('#')
+                    val path = if (withoutFragment.startsWith("/")) withoutFragment else "/$withoutFragment"
                     val queryIndex = path.indexOf('?')
                     val pathPart = if (queryIndex >= 0) path.substring(0, queryIndex) else path
                     val queryPart = if (queryIndex >= 0) path.substring(queryIndex + 1) else null
@@ -103,13 +106,14 @@ internal object UrlHelpers {
     /**
      * Parse query parameters from a URL or route string into a map.
      *
-     * Example: `"/products/123?color=red&size=L"` → `{color=red, size=L}`
+     * Example: `"/products/123?color=red&size=L#top"` → `{color=red, size=L}`
      */
     internal fun parseQueryParams(url: String): Map<String, String> {
-        val queryStart = url.indexOf('?')
+        val withoutFragment = url.substringBefore('#')
+        val queryStart = withoutFragment.indexOf('?')
         if (queryStart < 0) return emptyMap()
 
-        val query = url.substring(queryStart + 1)
+        val query = withoutFragment.substring(queryStart + 1)
         if (query.isBlank()) return emptyMap()
 
         return query.split('&').mapNotNull { param ->

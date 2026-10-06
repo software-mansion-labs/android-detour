@@ -33,6 +33,12 @@ class UrlHelpersTest {
     }
 
     @Test
+    fun `parseRoute - full URL drops fragment`() {
+        val result = UrlHelpers.parseRoute("https://example.com/app-hash/product/123?color=red#section")
+        assertEquals("/product/123?color=red", result)
+    }
+
+    @Test
     fun `parseRoute - single segment URL path returns root`() {
         val result = UrlHelpers.parseRoute("https://example.com/app-hash")
         assertEquals("/", result)
@@ -56,6 +62,12 @@ class UrlHelpersTest {
     fun `parseRoute - path with query strips first segment and preserves query`() {
         val result = UrlHelpers.parseRoute("/app-hash/product/123?color=red")
         assertEquals("/product/123?color=red", result)
+    }
+
+    @Test
+    fun `parseRoute - path drops fragment`() {
+        assertEquals("/product/123?color=red", UrlHelpers.parseRoute("/app-hash/product/123?color=red#section"))
+        assertEquals("/product/123", UrlHelpers.parseRoute("/app-hash/product/123#section"))
     }
 
     @Test
@@ -169,6 +181,19 @@ class UrlHelpersTest {
     fun `parseQueryParams - handles full URL`() {
         val params = UrlHelpers.parseQueryParams("https://example.com/hash/products/123?id=42")
         assertEquals(mapOf("id" to "42"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - ignores fragment after query`() {
+        val params = UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo?id=5#section")
+        assertEquals(mapOf("id" to "5"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - URL with only a fragment returns empty map`() {
+        val empty = emptyMap<String, String>()
+        assertEquals(empty, UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo#detour_open_app=true"))
+        assertEquals(empty, UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo#section?id=5"))
     }
 
     // --- extractPathname ---
