@@ -1,8 +1,6 @@
 package com.swmansion.detour.utils
 
 import android.net.Uri
-import android.util.Log
-import java.net.URL
 import java.net.URLDecoder
 
 /**
@@ -13,8 +11,6 @@ import java.net.URLDecoder
  * strip that first segment so the consumer receives `/products/123`.
  */
 internal object UrlHelpers {
-
-    private const val TAG = "UrlHelpers"
 
     /**
      * Parse a link and extract the route for navigation.
@@ -31,35 +27,16 @@ internal object UrlHelpers {
      * - `"/hash"`                                       → `"/"`
      *
      * @param link The link to parse (full URL or path)
-     * @return Extracted route, or null on blank/invalid input
+     * @return Extracted route, or null on blank input
      */
     internal fun parseRoute(link: String?): String? {
         if (link.isNullOrBlank()) return null
 
-        return try {
-            when {
-                link.startsWith("http://") || link.startsWith("https://") || link.startsWith("//") -> {
-                    val url = if (link.startsWith("//")) URL("https:$link") else URL(link)
-                    val cleanedPath = removeFirstPathSegment(url.path)
-                    val query = url.query
-                    if (query.isNullOrBlank()) cleanedPath else "$cleanedPath?$query"
-                }
-                else -> {
-                    // Path-only string — still strip the first segment (app hash).
-                    // Drop the fragment, as java.net.URL does for full URLs above.
-                    val withoutFragment = link.substringBefore('#')
-                    val path = if (withoutFragment.startsWith("/")) withoutFragment else "/$withoutFragment"
-                    val queryIndex = path.indexOf('?')
-                    val pathPart = if (queryIndex >= 0) path.substring(0, queryIndex) else path
-                    val queryPart = if (queryIndex >= 0) path.substring(queryIndex + 1) else null
-                    val cleanedPath = removeFirstPathSegment(pathPart)
-                    if (queryPart.isNullOrBlank()) cleanedPath else "$cleanedPath?$queryPart"
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "[Detour:TYPE_ERROR] Error parsing URL", e)
-            null
-        }
+        // A leading slash keeps a path-only string from being read as "scheme:..." by Uri.
+        val uri = Uri.parse(if (isWebUrl(link) || link.startsWith("/")) link else "/$link")
+        val cleanedPath = removeFirstPathSegment(uri.encodedPath.orEmpty())
+        val query = uri.encodedQuery
+        return if (query.isNullOrBlank()) cleanedPath else "$cleanedPath?$query"
     }
 
     /**
@@ -74,12 +51,17 @@ internal object UrlHelpers {
      * Extract the navigation route from a custom-scheme deep link.
      * Mirrors the RN SDK's `getRouteFromDeepLink()`.
      *
-     * Example: `myapp://product/123?color=red` → `"/product/123?color=red"`
+     * Examples:
+     * - `myapp://product/123?color=red` → `"/product/123?color=red"`
+     * - `myapp:product/123?color=red`   → `"/product/123?color=red"`
      */
     internal fun getRouteFromDeepLink(uri: Uri): String {
+        // Without "//" Uri is opaque and has no host, path or query, so read the raw part instead.
+        if (uri.isOpaque) return "/${uri.encodedSchemeSpecificPart}"
+
         val host = uri.host.orEmpty()
-        val path = uri.path.orEmpty()
-        val query = uri.query
+        val path = uri.encodedPath.orEmpty()
+        val query = uri.encodedQuery
 
         val hostPart = if (host.isBlank()) "" else "/$host"
         val pathPart = when {
@@ -109,26 +91,37 @@ internal object UrlHelpers {
      * Example: `"/products/123?color=red&size=L#top"` → `{color=red, size=L}`
      */
     internal fun parseQueryParams(url: String): Map<String, String> {
-        val withoutFragment = url.substringBefore('#')
-        val queryStart = withoutFragment.indexOf('?')
-        if (queryStart < 0) return emptyMap()
-
-        val query = withoutFragment.substring(queryStart + 1)
+        val uri = Uri.parse(url)
+        // Uri has no query for opaque URIs like "myapp:product?x=1", but RN reads one there.
+        val query = if (uri.isOpaque) {
+            uri.encodedSchemeSpecificPart.substringAfter('?', "")
+        } else {
+            uri.encodedQuery.orEmpty()
+        }
         if (query.isBlank()) return emptyMap()
 
         return query.split('&').mapNotNull { param ->
             val eqIndex = param.indexOf('=')
-            if (eqIndex > 0) {
-                val key = URLDecoder.decode(param.substring(0, eqIndex), "UTF-8")
-                val value = URLDecoder.decode(param.substring(eqIndex + 1), "UTF-8")
+            if (eqIndex >= 0) {
+                val key = decodeQueryComponent(param.substring(0, eqIndex))
+                val value = decodeQueryComponent(param.substring(eqIndex + 1))
                 key to value
             } else if (param.isNotBlank()) {
-                URLDecoder.decode(param, "UTF-8") to ""
+                decodeQueryComponent(param) to ""
             } else {
                 null
             }
         }.toMap()
     }
+
+    // URLDecoder throws on a stray '%' (e.g. "50%off"). Keep the raw text, as URLSearchParams
+    // does, so one bad param doesn't fail the whole link.
+    private fun decodeQueryComponent(value: String): String =
+        try {
+            URLDecoder.decode(value, "UTF-8")
+        } catch (e: IllegalArgumentException) {
+            value
+        }
 
     /**
      * Extract the pathname (path without query string) from a route.

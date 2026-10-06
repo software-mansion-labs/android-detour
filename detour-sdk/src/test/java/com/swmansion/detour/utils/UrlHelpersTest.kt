@@ -33,6 +33,12 @@ class UrlHelpersTest {
     }
 
     @Test
+    fun `parseRoute - uppercase scheme is parsed as full URL`() {
+        val result = UrlHelpers.parseRoute("HTTPS://example.com/app-hash/product/123?color=red")
+        assertEquals("/product/123?color=red", result)
+    }
+
+    @Test
     fun `parseRoute - full URL drops fragment`() {
         val result = UrlHelpers.parseRoute("https://example.com/app-hash/product/123?color=red#section")
         assertEquals("/product/123?color=red", result)
@@ -156,6 +162,26 @@ class UrlHelpersTest {
         assertEquals("/product/123?color=red", UrlHelpers.getRouteFromDeepLink(uri))
     }
 
+    @Test
+    fun `getRouteFromDeepLink - keeps percent-encoded delimiters encoded`() {
+        val uri = Uri.parse("myapp://product/a%3Fb?q=rock%26roll")
+        val route = UrlHelpers.getRouteFromDeepLink(uri)
+        assertEquals("/product/a%3Fb?q=rock%26roll", route)
+        assertEquals("/product/a%3Fb", UrlHelpers.extractPathname(route))
+    }
+
+    @Test
+    fun `getRouteFromDeepLink - opaque URI without slashes`() {
+        val uri = Uri.parse("myapp:product/123?x=1#y")
+        assertEquals("/product/123?x=1", UrlHelpers.getRouteFromDeepLink(uri))
+    }
+
+    @Test
+    fun `getRouteFromDeepLink - drops fragment`() {
+        val uri = Uri.parse("myapp://product/1?x=1#y")
+        assertEquals("/product/1?x=1", UrlHelpers.getRouteFromDeepLink(uri))
+    }
+
     // --- parseQueryParams ---
 
     @Test
@@ -190,10 +216,40 @@ class UrlHelpersTest {
     }
 
     @Test
+    fun `parseQueryParams - keeps encoded hash in value`() {
+        val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?q=a%23b#frag")
+        assertEquals(mapOf("q" to "a#b"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - custom scheme URL ignores fragment`() {
+        val params = UrlHelpers.parseQueryParams("myapp://product/1?x=1#y")
+        assertEquals(mapOf("x" to "1"), params)
+    }
+
+    @Test
     fun `parseQueryParams - URL with only a fragment returns empty map`() {
         val empty = emptyMap<String, String>()
         assertEquals(empty, UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo#detour_open_app=true"))
         assertEquals(empty, UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo#section?id=5"))
+    }
+
+    @Test
+    fun `parseQueryParams - param with empty key maps value to empty key`() {
+        val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?=5&id=1")
+        assertEquals(mapOf("" to "5", "id" to "1"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - opaque scheme URI without slashes`() {
+        val params = UrlHelpers.parseQueryParams("myapp:product/123?x=1#section")
+        assertEquals(mapOf("x" to "1"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - keeps raw value when percent-encoding is malformed`() {
+        val params = UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo?utm_content=50%off&id=5")
+        assertEquals(mapOf("utm_content" to "50%off", "id" to "5"), params)
     }
 
     // --- extractPathname ---
