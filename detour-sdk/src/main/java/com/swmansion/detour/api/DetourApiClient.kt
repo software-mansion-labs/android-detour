@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.FlutterSdkHeaderResolver
+import com.swmansion.detour.analytics.LinkAttribution
 import com.swmansion.detour.models.DeviceFingerprint
 import com.swmansion.detour.models.LinkMatchResponse
 import com.swmansion.detour.models.ShortLinkResponse
@@ -44,6 +45,7 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
                     val responseBody = response.body?.string() ?: return@use null
                     val linkResponse = HttpClient.gson.fromJson(responseBody, LinkMatchResponse::class.java)
                     if (linkResponse.link != null) Log.d(TAG, "Link matched successfully")
+                    linkResponse.clickId?.let { LinkAttribution.recordDeferredOpen(it) }
                     linkResponse.link
                 }
                 response.code == 404 -> {
@@ -145,6 +147,7 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
 
                 val isExplicitDeny = parsed?.allowed == false || response.code == 402
                 if (isExplicitDeny) {
+                    LinkAttribution.recordBlockedLinkOpen()
                     return@use UniversalLinkClickResult(
                         allowed = false,
                         error = parsed?.error ?: "Click limit exceeded",
@@ -154,6 +157,8 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
                     )
                 }
 
+                // Non-Detour opens (e.g. magic-link sign-in) must not clear attribution.
+                parsed?.clickId?.let(LinkAttribution::recordLinkOpen)
                 // Fail-open for temporary backend/network issues so apps keep working.
                 UniversalLinkClickResult(allowed = true, clickId = parsed?.clickId)
             }

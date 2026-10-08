@@ -6,4 +6,5 @@ package com.swmansion.detour.storage
 internal object StorageKeys {
     const val FIRST_ENTRANCE_FLAG = "Detour_firstEntranceFlag"
     const val DEVICE_ID = "Detour_deviceId"
+    const val INSTALL_CLICK_ID = "Detour_installClickId"
 }

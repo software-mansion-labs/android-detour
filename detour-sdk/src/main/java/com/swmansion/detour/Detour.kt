@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
+import com.swmansion.detour.analytics.LinkAttribution
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.fingerprint.FingerprintCollector
 import com.swmansion.detour.models.DeterministicFingerprint
@@ -92,6 +93,7 @@ object Detour {
         this.firstLaunchDetector = FirstLaunchDetector(storage)
 
         // Initialize analytics subsystem
+        LinkAttribution.initialize(storage)
         DetourAnalytics.initialize(config, storage)
         DetourAnalytics.logAppOpenIfNeeded()
 
@@ -237,6 +239,7 @@ object Detour {
      */
     private fun processSchemeLink(uri: Uri): LinkResult {
         Log.d(TAG, "Processing Scheme Link")
+        LinkAttribution.recordSchemeOpen()
 
         val link = uri.toString()
         val route = UrlHelpers.getRouteFromDeepLink(uri)
