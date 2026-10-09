@@ -150,6 +150,15 @@ internal object UrlHelpers {
     private fun parsePath(path: String): Uri =
         Uri.parse("https://x" + if (path.startsWith("/")) path else "/$path")
 
+    /**
+     * Remove the first path segment (app hash) from a pathname.
+     * Mirrors the RN SDK's `getRestOfPath()`.
+     *
+     * Examples:
+     * - `"/hash/product/123"` → `"/product/123"`
+     * - `"/hash"`             → `"/"`
+     * - `"/"`                 → `"/"`
+     */
     private fun removeFirstPathSegment(path: String): String {
         if (path.isBlank() || path == "/") return "/"
 
