@@ -33,6 +33,18 @@ class UrlHelpersTest {
     }
 
     @Test
+    fun `parseRoute - uppercase scheme is parsed as full URL`() {
+        val result = UrlHelpers.parseRoute("HTTPS://example.com/app-hash/product/123?color=red")
+        assertEquals("/product/123?color=red", result)
+    }
+
+    @Test
+    fun `parseRoute - full URL drops fragment`() {
+        val result = UrlHelpers.parseRoute("https://example.com/app-hash/product/123?color=red#section")
+        assertEquals("/product/123?color=red", result)
+    }
+
+    @Test
     fun `parseRoute - single segment URL path returns root`() {
         val result = UrlHelpers.parseRoute("https://example.com/app-hash")
         assertEquals("/", result)
@@ -56,6 +68,21 @@ class UrlHelpersTest {
     fun `parseRoute - path with query strips first segment and preserves query`() {
         val result = UrlHelpers.parseRoute("/app-hash/product/123?color=red")
         assertEquals("/product/123?color=red", result)
+    }
+
+    @Test
+    fun `parseRoute - path drops fragment`() {
+        assertEquals("/product/123?color=red", UrlHelpers.parseRoute("/app-hash/product/123?color=red#section"))
+        assertEquals("/product/123", UrlHelpers.parseRoute("/app-hash/product/123#section"))
+    }
+
+    @Test
+    fun `parseRoute - colon in path-only string stays in path or query`() {
+        assertEquals("/p?redirect=https://x.com/y", UrlHelpers.parseRoute("/hash/p?redirect=https://x.com/y"))
+        assertEquals("/product:1?x=1", UrlHelpers.parseRoute("/hash/product:1?x=1"))
+        assertEquals("/time/12:30?x=1", UrlHelpers.parseRoute("hash/time/12:30?x=1"))
+        assertEquals("/urn:isbn:123", UrlHelpers.parseRoute("/hash/urn:isbn:123"))
+        assertEquals("/p?redirect=https://x.com/y", UrlHelpers.parseRoute("//example.com/hash/p?redirect=https://x.com/y"))
     }
 
     @Test
@@ -144,6 +171,34 @@ class UrlHelpersTest {
         assertEquals("/product/123?color=red", UrlHelpers.getRouteFromDeepLink(uri))
     }
 
+    @Test
+    fun `getRouteFromDeepLink - keeps percent-encoded delimiters encoded`() {
+        val uri = Uri.parse("myapp://product/a%3Fb?q=rock%26roll")
+        val route = UrlHelpers.getRouteFromDeepLink(uri)
+        assertEquals("/product/a%3Fb?q=rock%26roll", route)
+        assertEquals("/product/a%3Fb", UrlHelpers.extractPathname(route))
+    }
+
+    @Test
+    fun `getRouteFromDeepLink - opaque URI without slashes`() {
+        val uri = Uri.parse("myapp:product/123?x=1#y")
+        assertEquals("/product/123?x=1", UrlHelpers.getRouteFromDeepLink(uri))
+    }
+
+    @Test
+    fun `getRouteFromDeepLink - keeps encoded host encoded and drops user info`() {
+        val route = UrlHelpers.getRouteFromDeepLink(Uri.parse("myapp://a%3Fb/x?y=1"))
+        assertEquals("/a%3Fb/x?y=1", route)
+        assertEquals("/a%3Fb/x", UrlHelpers.extractPathname(route))
+        assertEquals("/product/x", UrlHelpers.getRouteFromDeepLink(Uri.parse("myapp://user@product/x")))
+    }
+
+    @Test
+    fun `getRouteFromDeepLink - drops fragment`() {
+        val uri = Uri.parse("myapp://product/1?x=1#y")
+        assertEquals("/product/1?x=1", UrlHelpers.getRouteFromDeepLink(uri))
+    }
+
     // --- parseQueryParams ---
 
     @Test
@@ -169,6 +224,64 @@ class UrlHelpersTest {
     fun `parseQueryParams - handles full URL`() {
         val params = UrlHelpers.parseQueryParams("https://example.com/hash/products/123?id=42")
         assertEquals(mapOf("id" to "42"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - ignores fragment after query`() {
+        val params = UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo?id=5#section")
+        assertEquals(mapOf("id" to "5"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - keeps encoded hash in value`() {
+        val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?q=a%23b#frag")
+        assertEquals(mapOf("q" to "a#b"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - custom scheme URL ignores fragment`() {
+        val params = UrlHelpers.parseQueryParams("myapp://product/1?x=1#y")
+        assertEquals(mapOf("x" to "1"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - URL with only a fragment returns empty map`() {
+        val empty = emptyMap<String, String>()
+        assertEquals(empty, UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo#detour_open_app=true"))
+        assertEquals(empty, UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo#section?id=5"))
+    }
+
+    @Test
+    fun `parseQueryParams - param with empty key maps value to empty key`() {
+        val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?=5&id=1")
+        assertEquals(mapOf("" to "5", "id" to "1"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - colon in path-only string stays in path or query`() {
+        assertEquals(mapOf("redirect" to "https://x.com/y"), UrlHelpers.parseQueryParams("/hash/p?redirect=https://x.com/y"))
+        assertEquals(mapOf("x" to "1"), UrlHelpers.parseQueryParams("/hash/product:1?x=1"))
+        assertEquals(mapOf("x" to "1"), UrlHelpers.parseQueryParams("hash/time/12:30?x=1"))
+        assertEquals(emptyMap<String, String>(), UrlHelpers.parseQueryParams("/hash/urn:isbn:123"))
+        assertEquals(mapOf("redirect" to "https://x.com/y"), UrlHelpers.parseQueryParams("//example.com/hash/p?redirect=https://x.com/y"))
+    }
+
+    @Test
+    fun `parseQueryParams - opaque scheme URI without slashes`() {
+        val params = UrlHelpers.parseQueryParams("myapp:product/123?x=1#section")
+        assertEquals(mapOf("x" to "1"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - keeps raw value when percent-encoding is malformed`() {
+        val params = UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo?utm_content=50%off&id=5")
+        assertEquals(mapOf("utm_content" to "50%off", "id" to "5"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - decodes the rest of a value with a stray percent sign`() {
+        val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?a=hello+50%off&b=100%25%off")
+        assertEquals(mapOf("a" to "hello 50%off", "b" to "100%%off"), params)
     }
 
     // --- extractPathname ---
