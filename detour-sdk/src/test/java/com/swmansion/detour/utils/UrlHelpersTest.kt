@@ -186,6 +186,14 @@ class UrlHelpersTest {
     }
 
     @Test
+    fun `getRouteFromDeepLink - keeps encoded host encoded and drops user info`() {
+        val route = UrlHelpers.getRouteFromDeepLink(Uri.parse("myapp://a%3Fb/x?y=1"))
+        assertEquals("/a%3Fb/x?y=1", route)
+        assertEquals("/a%3Fb/x", UrlHelpers.extractPathname(route))
+        assertEquals("/product/x", UrlHelpers.getRouteFromDeepLink(Uri.parse("myapp://user@product/x")))
+    }
+
+    @Test
     fun `getRouteFromDeepLink - drops fragment`() {
         val uri = Uri.parse("myapp://product/1?x=1#y")
         assertEquals("/product/1?x=1", UrlHelpers.getRouteFromDeepLink(uri))
@@ -268,6 +276,12 @@ class UrlHelpersTest {
     fun `parseQueryParams - keeps raw value when percent-encoding is malformed`() {
         val params = UrlHelpers.parseQueryParams("https://acme.godetour.link/abc/promo?utm_content=50%off&id=5")
         assertEquals(mapOf("utm_content" to "50%off", "id" to "5"), params)
+    }
+
+    @Test
+    fun `parseQueryParams - decodes the rest of a value with a stray percent sign`() {
+        val params = UrlHelpers.parseQueryParams("https://example.com/abc/p?a=hello+50%off&b=100%25%off")
+        assertEquals(mapOf("a" to "hello 50%off", "b" to "100%%off"), params)
     }
 
     // --- extractPathname ---

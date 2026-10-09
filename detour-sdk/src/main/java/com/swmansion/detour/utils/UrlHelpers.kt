@@ -13,6 +13,7 @@ import java.net.URLDecoder
 internal object UrlHelpers {
 
     private val SCHEME_PREFIX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
+    private val STRAY_PERCENT = Regex("%(?![0-9A-Fa-f]{2})")
 
     /**
      * Parse a link and extract the route for navigation.
@@ -60,7 +61,9 @@ internal object UrlHelpers {
         // Without "//" Uri is opaque and has no host, path or query, so read the raw part instead.
         if (uri.isOpaque) return "/${uri.encodedSchemeSpecificPart}"
 
-        val host = uri.host.orEmpty()
+        // Uri.getHost() decodes the host despite its docs. Use the raw authority without
+        // user info instead, like RN's URL.host.
+        val host = uri.encodedAuthority.orEmpty().substringAfterLast('@')
         val path = uri.encodedPath.orEmpty()
         val query = uri.encodedQuery
 
@@ -115,11 +118,11 @@ internal object UrlHelpers {
         }.toMap()
     }
 
-    // URLDecoder throws on a stray '%' (e.g. "50%off"). Keep the raw text, as URLSearchParams
-    // does, so one bad param doesn't fail the whole link.
+    // URLDecoder throws on a '%' that doesn't start an escape (e.g. "50%off"). URLSearchParams
+    // keeps such a '%' as text, so escape it first. The catch is a fallback for anything else.
     private fun decodeQueryComponent(value: String): String =
         try {
-            URLDecoder.decode(value, "UTF-8")
+            URLDecoder.decode(value.replace(STRAY_PERCENT, "%25"), "UTF-8")
         } catch (e: IllegalArgumentException) {
             value
         }
@@ -135,15 +138,7 @@ internal object UrlHelpers {
         return if (queryIndex >= 0) route.substring(0, queryIndex) else route
     }
 
-    /**
-     * Remove the first path segment (app hash) from a pathname.
-     * Mirrors the RN SDK's `getRestOfPath()`.
-     *
-     * Examples:
-     * - `"/hash/product/123"` → `"/product/123"`
-     * - `"/hash"`             → `"/"`
-     * - `"/"`                 → `"/"`
-     */
+    // Accepts a full URL (any scheme), a "//host" link or a path-only string.
     private fun parseLink(link: String): Uri = when {
         link.startsWith("//") -> Uri.parse("https:$link")
         SCHEME_PREFIX.containsMatchIn(link) -> Uri.parse(link)
