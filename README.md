@@ -24,7 +24,7 @@ Add the SDK to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.swmansion.detour:detour-sdk:1.1.0")
+    implementation("com.swmansion.detour:detour-sdk:1.1.1")
 }
 ```
 
