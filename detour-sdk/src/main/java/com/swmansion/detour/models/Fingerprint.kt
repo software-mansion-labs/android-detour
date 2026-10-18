@@ -69,5 +69,7 @@ data class LocaleInfo(
  */
 data class LinkMatchResponse(
     @SerializedName("link")
-    val link: String?
+    val link: String?,
+    @SerializedName("clickId")
+    val clickId: String? = null
 )
