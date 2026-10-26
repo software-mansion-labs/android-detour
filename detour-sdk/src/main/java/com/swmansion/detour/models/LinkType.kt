@@ -6,7 +6,7 @@ package com.swmansion.detour.models
 enum class LinkType {
     /**
      * Deferred deep link - user clicked link before app was installed.
-     * Matched via API call with device fingerprint.
+     * Matched via API call with a match request.
      */
     DEFERRED,
 

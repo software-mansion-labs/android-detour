@@ -7,13 +7,13 @@ import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.DetourEndpoints
-import com.swmansion.detour.fingerprint.FingerprintCollector
-import com.swmansion.detour.models.DeterministicFingerprint
+import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.models.LinkProcessingMode
 import com.swmansion.detour.models.LinkResult
 import com.swmansion.detour.models.LinkType
 import com.swmansion.detour.models.ShortLinkResponse
 import com.swmansion.detour.referrer.InstallReferrerHelper
+import com.swmansion.detour.signals.SignalCollector
 import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.FirstLaunchDetector
@@ -59,7 +59,7 @@ object Detour {
     private lateinit var config: DetourConfig
     private lateinit var storage: DetourStorage
     private lateinit var apiClient: DetourApiClient
-    private lateinit var fingerprintCollector: FingerprintCollector
+    private lateinit var signalCollector: SignalCollector
     private lateinit var installReferrerHelper: InstallReferrerHelper
     private lateinit var firstLaunchDetector: FirstLaunchDetector
 
@@ -89,7 +89,7 @@ object Detour {
         DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
         this.apiClient = DetourApiClient(config, context.applicationContext)
-        this.fingerprintCollector = FingerprintCollector(context.applicationContext)
+        this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.firstLaunchDetector = FirstLaunchDetector(storage)
 
@@ -272,17 +272,15 @@ object Detour {
         firstLaunchDetector.markAsLaunched()
         Log.d(TAG, "First launch detected, processing deferred link")
 
-        // Try to get click ID from install referrer (deterministic matching)
+        // Try to get click ID from install referrer (direct matching)
         val clickId = installReferrerHelper.getClickId()
 
         val link: String? = if (clickId != null) {
-            Log.d(TAG, "Using deterministic matching with click_id")
-            val fingerprint = DeterministicFingerprint(clickId)
-            apiClient.matchLink(fingerprint)
+            Log.d(TAG, "Using direct matching with click_id")
+            apiClient.matchLink(DirectMatchRequest(clickId))
         } else {
-            Log.d(TAG, "The click_id not found, using probabilistic matching")
-            val fingerprint = fingerprintCollector.collectFingerprint()
-            apiClient.matchLink(fingerprint)
+            Log.d(TAG, "The click_id not found, using signal-based matching")
+            apiClient.matchLink(signalCollector.collectSignals())
         }
 
         if (link == null) {
