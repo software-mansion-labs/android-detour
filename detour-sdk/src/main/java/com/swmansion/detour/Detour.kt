@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
+import com.swmansion.detour.api.DetourEndpoints
 import com.swmansion.detour.fingerprint.FingerprintCollector
 import com.swmansion.detour.models.DeterministicFingerprint
 import com.swmansion.detour.models.LinkProcessingMode
@@ -85,6 +86,7 @@ object Detour {
 
         this.applicationContext = context.applicationContext
         this.config = config
+        DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
         this.apiClient = DetourApiClient(config, context.applicationContext)
         this.fingerprintCollector = FingerprintCollector(context.applicationContext)
