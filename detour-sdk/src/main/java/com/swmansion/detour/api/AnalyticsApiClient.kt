@@ -32,6 +32,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
      */
     suspend fun sendEvent(eventName: String, data: Any?, deviceId: String) =
         withContext(Dispatchers.IO) {
+            val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_EVENT, config) ?: return@withContext
             try {
                 val payload = buildMap<String, Any?> {
                     put("event_name", eventName)
@@ -45,7 +46,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                 val requestBody = json.toRequestBody(HttpClient.JSON)
 
                 val request = Request.Builder()
-                    .url(EVENT_URL)
+                    .url(url)
                     .post(requestBody)
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Authorization", "Bearer ${config.apiKey}")
@@ -71,6 +72,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
      */
     suspend fun sendRetentionEvent(eventName: String, deviceId: String) =
         withContext(Dispatchers.IO) {
+            val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_RETENTION, config) ?: return@withContext
             try {
                 val payload = mapOf(
                     "event_name" to eventName,
@@ -83,7 +85,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                 val requestBody = json.toRequestBody(HttpClient.JSON)
 
                 val request = Request.Builder()
-                    .url(RETENTION_URL)
+                    .url(url)
                     .post(requestBody)
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Authorization", "Bearer ${config.apiKey}")
@@ -103,7 +105,5 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
 
     companion object {
         private const val TAG = "AnalyticsApiClient"
-        private const val EVENT_URL = "https://godetour.dev/api/analytics/event"
-        private const val RETENTION_URL = "https://godetour.dev/api/analytics/retention"
     }
 }

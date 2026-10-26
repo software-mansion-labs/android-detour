@@ -237,9 +237,14 @@ data class DetourConfig(
     val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
 
     /** Custom storage implementation (defaults to SharedPreferences). */
-    val storage: DetourStorage? = null
+    val storage: DetourStorage? = null,
+
+    /** Detour API host for tests and non-production environments (default: null = production Detour API). */
+    val baseUrl: String? = null
 )
 ```
+
+`baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.initialize` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
 
 </details>
 
