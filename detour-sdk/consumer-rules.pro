@@ -3,8 +3,8 @@
 
 # Keep Gson model classes used for API serialization/deserialization.
 # Gson uses reflection to access @SerializedName fields at runtime.
--keep class com.swmansion.detour.models.ProbabilisticFingerprint { *; }
--keep class com.swmansion.detour.models.DeterministicFingerprint { *; }
+-keep class com.swmansion.detour.models.SignalMatchRequest { *; }
+-keep class com.swmansion.detour.models.DirectMatchRequest { *; }
 -keep class com.swmansion.detour.models.LocaleInfo { *; }
 -keep class com.swmansion.detour.models.LinkMatchResponse { *; }
 -keep class com.swmansion.detour.models.ShortLinkResponse { *; }

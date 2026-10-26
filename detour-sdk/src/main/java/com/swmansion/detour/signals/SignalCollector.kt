@@ -1,4 +1,4 @@
-package com.swmansion.detour.fingerprint
+package com.swmansion.detour.signals
 
 import android.content.Context
 import android.content.res.Resources
@@ -6,31 +6,31 @@ import android.os.Build
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import com.swmansion.detour.models.LocaleInfo
-import com.swmansion.detour.models.ProbabilisticFingerprint
+import com.swmansion.detour.models.SignalMatchRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Collects device fingerprint data for link matching.
+ * Collects device signals for link matching.
  */
-internal class FingerprintCollector(private val context: Context) {
+internal class SignalCollector(private val context: Context) {
 
     /**
-     * Collect probabilistic device fingerprint.
+     * Collect device signals for a signal-based match request.
      *
      * Note: clipboard is not read on Android — it triggers a system toast notification
      * and is restricted to foreground apps. Deferred matching relies on IP, device model,
      * screen dimensions, timezone, and language instead.
      */
-    suspend fun collectFingerprint(): ProbabilisticFingerprint =
+    suspend fun collectSignals(): SignalMatchRequest =
         withContext(Dispatchers.IO) {
             val (width, height, density) = getScreenMetrics()
             val locale = Locale.getDefault()
             val timezone = TimeZone.getDefault()
 
-            ProbabilisticFingerprint(
+            SignalMatchRequest(
                 platform = "android",
                 model = Build.MODEL,
                 manufacturer = Build.MANUFACTURER,

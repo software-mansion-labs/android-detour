@@ -5,7 +5,7 @@ import android.os.Build
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.FlutterSdkHeaderResolver
-import com.swmansion.detour.models.DeviceFingerprint
+import com.swmansion.detour.models.MatchRequest
 import com.swmansion.detour.models.LinkMatchResponse
 import com.swmansion.detour.models.ShortLinkResponse
 import kotlinx.coroutines.Dispatchers
@@ -20,15 +20,15 @@ import java.io.IOException
 internal class DetourApiClient(private val config: DetourConfig, private val context: Context) {
 
     /**
-     * Match link using fingerprint data.
+     * Match link using a direct or signal-based match request.
      *
-     * @param fingerprint Device fingerprint (probabilistic or deterministic)
+     * @param request Match request (direct or signal-based)
      * @return Matched link or null
      */
-    suspend fun matchLink(fingerprint: DeviceFingerprint): String? = withContext(Dispatchers.IO) {
+    suspend fun matchLink(request: MatchRequest): String? = withContext(Dispatchers.IO) {
         val url = DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config) ?: return@withContext null
-        val json = HttpClient.gson.toJson(fingerprint)
-        Log.d(TAG, "Sending fingerprint to API")
+        val json = HttpClient.gson.toJson(request)
+        Log.d(TAG, "Sending match request to API")
 
         val request = Request.Builder()
             .url(url)

@@ -3,14 +3,14 @@ package com.swmansion.detour.models
 import com.google.gson.annotations.SerializedName
 
 /**
- * Base interface for device fingerprints used in link matching.
+ * Base interface for link-matching requests.
  */
-sealed interface DeviceFingerprint
+sealed interface MatchRequest
 
 /**
- * Probabilistic device fingerprint for link matching.
+ * Signal-based match request built from device signals.
  */
-data class ProbabilisticFingerprint(
+data class SignalMatchRequest(
     @SerializedName("platform")
     val platform: String,
     
@@ -46,15 +46,15 @@ data class ProbabilisticFingerprint(
     
     @SerializedName("pastedLink")
     val pastedLink: String? = null
-) : DeviceFingerprint
+) : MatchRequest
 
 /**
- * Deterministic fingerprint using click ID from install referrer.
+ * Direct match request using the click ID from the install referrer.
  */
-data class DeterministicFingerprint(
+data class DirectMatchRequest(
     @SerializedName("clickId")
     val clickId: String
-) : DeviceFingerprint
+) : MatchRequest
 
 /**
  * Locale information.

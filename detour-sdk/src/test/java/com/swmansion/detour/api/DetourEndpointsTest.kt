@@ -1,7 +1,7 @@
 package com.swmansion.detour.api
 
 import com.swmansion.detour.DetourConfig
-import com.swmansion.detour.models.DeterministicFingerprint
+import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -109,7 +109,7 @@ class ApiClientsBaseUrlTest {
         val apiClient = DetourApiClient(config, RuntimeEnvironment.getApplication())
         val analyticsClient = AnalyticsApiClient(config)
 
-        apiClient.matchLink(DeterministicFingerprint(clickId = "click"))
+        apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
         analyticsClient.sendEvent("test", null, "device")
