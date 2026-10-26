@@ -26,11 +26,12 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
      * @return Matched link or null
      */
     suspend fun matchLink(fingerprint: DeviceFingerprint): String? = withContext(Dispatchers.IO) {
+        val url = DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config) ?: return@withContext null
         val json = HttpClient.gson.toJson(fingerprint)
         Log.d(TAG, "Sending fingerprint to API")
 
         val request = Request.Builder()
-            .url(MATCH_LINK_URL)
+            .url(url)
             .post(json.toRequestBody(HttpClient.JSON))
             .addHeader("Content-Type", "application/json")
             .addHeader("Authorization", "Bearer ${config.apiKey}")
@@ -65,12 +66,13 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
      * @return ShortLinkResponse or null on 404/error (matches RN SDK behavior)
      */
     suspend fun resolveShortLink(url: String): ShortLinkResponse? = withContext(Dispatchers.IO) {
+        val endpoint = DetourEndpoints.url(DetourEndpoint.RESOLVE_SHORT, config) ?: return@withContext null
         try {
             val payload = HttpClient.gson.toJson(mapOf("url" to url))
             val requestBody = payload.toRequestBody(HttpClient.JSON)
 
             val request = Request.Builder()
-                .url(RESOLVE_SHORT_URL)
+                .url(endpoint)
                 .post(requestBody)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Authorization", "Bearer ${config.apiKey}")
@@ -117,6 +119,8 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
     )
 
     suspend fun sendUniversalLinkClick(url: String, params: Map<String, String> = emptyMap()): UniversalLinkClickResult = withContext(Dispatchers.IO) {
+        val endpoint = DetourEndpoints.url(DetourEndpoint.UNIVERSAL_LINK_CLICK, config)
+            ?: return@withContext UniversalLinkClickResult(allowed = true)
         try {
             val body = mutableMapOf<String, Any>(
                 "url" to url,
@@ -127,7 +131,7 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
             if (params.isNotEmpty()) body["params"] = params
             val payload = HttpClient.gson.toJson(body)
             val request = Request.Builder()
-                .url(UNIVERSAL_LINK_CLICK_URL)
+                .url(endpoint)
                 .post(payload.toRequestBody(HttpClient.JSON))
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Authorization", "Bearer ${config.apiKey}")
@@ -183,8 +187,5 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
 
     companion object {
         private const val TAG = "DetourApiClient"
-        private const val MATCH_LINK_URL = "https://godetour.dev/api/link/match-link"
-        private const val RESOLVE_SHORT_URL = "https://godetour.dev/api/link/resolve-short"
-        private const val UNIVERSAL_LINK_CLICK_URL = "https://godetour.dev/api/link/universal-link-click"
     }
 }

@@ -11,12 +11,15 @@ import com.swmansion.detour.storage.DetourStorage
  * @property linkProcessingMode Controls which link sources are handled (default: [LinkProcessingMode.ALL])
  * @property storage Custom storage implementation for persisting SDK data.
  *                   Defaults to SharedPreferences-based storage.
+ * @property baseUrl Detour API host for tests and non-production environments (https only).
+ *                   `null` uses the production Detour API.
  */
 data class DetourConfig(
     val apiKey: String,
     val appId: String,
     val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
-    val storage: DetourStorage? = null
+    val storage: DetourStorage? = null,
+    val baseUrl: String? = null
 ) {
     /**
      * Builder for Java callers (data class defaults don't work from Java).
@@ -30,15 +33,18 @@ data class DetourConfig(
     class Builder(private val apiKey: String, private val appId: String) {
         private var linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL
         private var storage: DetourStorage? = null
+        private var baseUrl: String? = null
 
         fun linkProcessingMode(value: LinkProcessingMode) = apply { linkProcessingMode = value }
         fun storage(value: DetourStorage) = apply { storage = value }
+        fun baseUrl(value: String) = apply { baseUrl = value }
 
         fun build(): DetourConfig = DetourConfig(
             apiKey = apiKey,
             appId = appId,
             linkProcessingMode = linkProcessingMode,
-            storage = storage
+            storage = storage,
+            baseUrl = baseUrl
         )
     }
 }

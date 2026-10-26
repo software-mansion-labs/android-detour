@@ -14,7 +14,8 @@ import java.util.concurrent.TimeUnit
  */
 internal object HttpClient {
 
-    val okHttp: OkHttpClient = OkHttpClient.Builder()
+    // var so tests can add an interceptor instead of reaching the network.
+    var okHttp: OkHttpClient = OkHttpClient.Builder()
         .callTimeout(15, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -22,7 +23,7 @@ internal object HttpClient {
         .build()
 
     // Shared connection pool, tighter call timeout for link-gate requests.
-    val shortTimeoutOkHttp: OkHttpClient = okHttp.newBuilder()
+    var shortTimeoutOkHttp: OkHttpClient = okHttp.newBuilder()
         .callTimeout(5, TimeUnit.SECONDS)
         .build()
 
