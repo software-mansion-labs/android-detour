@@ -1,8 +1,10 @@
 package com.swmansion.detour
 
 import android.content.Intent
+import android.os.Bundle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.savedstate.SavedStateRegistryOwner
 import com.swmansion.detour.models.LinkResult
 import kotlinx.coroutines.launch
 
@@ -13,6 +15,10 @@ import kotlinx.coroutines.launch
  *
  * Compatible with any [LifecycleOwner] — `ComponentActivity`, `AppCompatActivity`,
  * or `Fragment`.
+ *
+ * A link opens once: when the owner is recreated (rotation, process death), the link from the
+ * restored intent is not delivered again. This needs an owner with saved state, such as an
+ * activity or a fragment.
  *
  * Usage:
  * ```
@@ -61,6 +67,8 @@ class DetourDelegate(
      * @param intent The activity intent
      */
     fun onCreate(intent: Intent) {
+        markOpenedIfRecreated(intent)
+
         lifecycleOwner.lifecycleScope.launch {
             val result = Detour.processLink(intent)
             onLinkResult(result)
@@ -77,5 +85,26 @@ class DetourDelegate(
             val result = Detour.processLink(intent)
             onLinkResult(result)
         }
+    }
+
+    /**
+     * Marks the link from [intent] as opened when the owner was restored from saved state written
+     * by an earlier DetourDelegate. Registers that state, so the next instance can tell too.
+     */
+    private fun markOpenedIfRecreated(intent: Intent) {
+        val registry = (lifecycleOwner as? SavedStateRegistryOwner)?.savedStateRegistry ?: return
+        // Saved state is readable only after the owner's super.onCreate.
+        if (!registry.isRestored) return
+
+        if (registry.consumeRestoredStateForKey(SAVED_STATE_KEY) != null) {
+            LinkOpens.markOpenedBeforeProcessDeath(intent)
+        }
+        if (registry.getSavedStateProvider(SAVED_STATE_KEY) == null) {
+            registry.registerSavedStateProvider(SAVED_STATE_KEY) { Bundle() }
+        }
+    }
+
+    private companion object {
+        const val SAVED_STATE_KEY = "com.swmansion.detour.DetourDelegate"
     }
 }
