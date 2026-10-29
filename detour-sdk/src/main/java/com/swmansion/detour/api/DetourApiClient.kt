@@ -116,7 +116,13 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
         val effectiveLimit: Int? = null
     )
 
-    suspend fun sendUniversalLinkClick(url: String, params: Map<String, String> = emptyMap()): UniversalLinkClickResult = withContext(Dispatchers.IO) {
+    /**
+     * Saves a click on a Universal/App Link.
+     *
+     * @return The server decision, or null when the click was not saved (network error or an
+     *         error response), so it can be sent again
+     */
+    suspend fun sendUniversalLinkClick(url: String, params: Map<String, String> = emptyMap()): UniversalLinkClickResult? = withContext(Dispatchers.IO) {
         try {
             val body = mutableMapOf<String, Any>(
                 "url" to url,
@@ -154,13 +160,16 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
                     )
                 }
 
-                // Fail-open for temporary backend/network issues so apps keep working.
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "[Detour:NETWORK_ERROR] Universal link click not saved: ${response.code}")
+                    return@use null
+                }
+
                 UniversalLinkClickResult(allowed = true, clickId = parsed?.clickId)
             }
         } catch (e: Exception) {
-            // Fail-open on transport errors; limit enforcement only happens on explicit deny.
-            Log.w(TAG, "[Detour:NETWORK_ERROR] sendUniversalLinkClick failed, allowing through", e)
-            UniversalLinkClickResult(allowed = true)
+            Log.w(TAG, "[Detour:NETWORK_ERROR] Universal link click not sent", e)
+            null
         }
     }
 

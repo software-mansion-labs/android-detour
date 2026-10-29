@@ -30,7 +30,8 @@ sealed class LinkResult {
     data object NotFirstLaunch : LinkResult()
 
     /**
-     * No link found - normal app launch without any deep link.
+     * No link found - normal app launch without any deep link, or the link from this intent
+     * was already opened (for example, the activity was recreated).
      */
     data object NoLink : LinkResult()
 

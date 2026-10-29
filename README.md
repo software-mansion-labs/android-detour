@@ -259,7 +259,7 @@ sealed class LinkResult {
     ) : LinkResult()
 
     data object NotFirstLaunch : LinkResult()               // Not first launch
-    data object NoLink : LinkResult()                       // Normal app launch
+    data object NoLink : LinkResult()                       // Normal app launch, or link already opened
     data class Error(val exception: Exception) : LinkResult()
 }
 ```

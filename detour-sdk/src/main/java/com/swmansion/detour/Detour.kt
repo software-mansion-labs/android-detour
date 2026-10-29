@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
+import com.swmansion.detour.api.UniversalLinkClickRecorder
 import com.swmansion.detour.fingerprint.FingerprintCollector
 import com.swmansion.detour.models.DeterministicFingerprint
 import com.swmansion.detour.models.LinkProcessingMode
@@ -18,6 +19,7 @@ import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.FirstLaunchDetector
 import com.swmansion.detour.utils.UrlHelpers
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 
 /**
  * Main entry point for Detour SDK.
@@ -53,11 +55,13 @@ object Detour {
     private var isInitialized = false
 
     private val sessionHandled = AtomicBoolean(false)
+    private val linkOpens = LinkOpens()
 
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
     private lateinit var storage: DetourStorage
     private lateinit var apiClient: DetourApiClient
+    private lateinit var clickRecorder: UniversalLinkClickRecorder
     private lateinit var fingerprintCollector: FingerprintCollector
     private lateinit var installReferrerHelper: InstallReferrerHelper
     private lateinit var firstLaunchDetector: FirstLaunchDetector
@@ -87,6 +91,9 @@ object Detour {
         this.config = config
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
         this.apiClient = DetourApiClient(config, context.applicationContext)
+        this.clickRecorder = UniversalLinkClickRecorder(sendClick = { url ->
+            apiClient.sendUniversalLinkClick(url, UrlHelpers.parseQueryParams(url))
+        })
         this.fingerprintCollector = FingerprintCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.firstLaunchDetector = FirstLaunchDetector(storage)
@@ -110,6 +117,10 @@ object Detour {
      *
      * In [LinkProcessingMode.DEFERRED_ONLY] mode, steps 1-2 are skipped entirely.
      *
+     * A link from an intent opens once. Processing the same intent again, for example after the
+     * activity was recreated, returns [LinkResult.NoLink]. So does the same link in another intent
+     * within 1 s of an open, for example when a splash activity passes it on.
+     *
      * @param intent Activity intent to process
      * @return LinkResult with link data or status
      */
@@ -129,19 +140,23 @@ object Detour {
                     val uriString = uri.toString()
 
                     if (UrlHelpers.isWebUrl(uriString)) {
-                        // Mark first entrance so subsequent launches don't try deferred matching
-                        firstLaunchDetector.markAsLaunched()
-                        return processUniversalLink(uri)
+                        return linkOpens.openOnce(intent) {
+                            // Mark first entrance so subsequent launches don't try deferred matching
+                            firstLaunchDetector.markAsLaunched()
+                            processUniversalLink(uri)
+                        }
                     }
 
                     if (config.linkProcessingMode == LinkProcessingMode.ALL) {
-                        return processSchemeLink(uri)
+                        return linkOpens.openOnce(intent) { processSchemeLink(uri) }
                     }
                 }
             }
 
             // Step 2: Fallback to deferred link
             processDeferredLink()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing link", e)
             LinkResult.Error(e)
@@ -167,6 +182,8 @@ object Detour {
 
         return try {
             processDeferredLink()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing deferred link", e)
             LinkResult.Error(e)
@@ -197,7 +214,7 @@ object Detour {
         Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
-        val clickResult = apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
+        val clickResult = clickRecorder.record(link)
         if (!clickResult.allowed) {
             Log.e(TAG, "[Detour:CLICK_LIMIT_ERROR] Universal/App link blocked: url=$link error=${clickResult.error} code=${clickResult.code} clicksInPeriod=${clickResult.clicksInPeriod} effectiveLimit=${clickResult.effectiveLimit}")
             return LinkResult.NoLink
