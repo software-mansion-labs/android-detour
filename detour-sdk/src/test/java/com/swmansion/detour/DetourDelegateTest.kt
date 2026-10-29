@@ -48,7 +48,7 @@ class DetourDelegateTest {
         val intent = linkIntent()
         val before = TestOwner.created(savedState = null)
         delegate(before).onCreate(intent)
-        val destroyedCaller = launch { LinkOpens.openOnce(intent) { awaitCancellation() } }
+        val destroyedCaller = launch { LinkOpens().openOnce(intent) { awaitCancellation() } }
         runCurrent()
         destroyedCaller.cancel()
 
