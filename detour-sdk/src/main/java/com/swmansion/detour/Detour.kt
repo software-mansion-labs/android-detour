@@ -7,6 +7,8 @@ import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.DetourEndpoints
+import com.swmansion.detour.identity.UserIdPolicy
+import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.models.LinkProcessingMode
 import com.swmansion.detour.models.LinkResult
@@ -16,7 +18,7 @@ import com.swmansion.detour.referrer.InstallReferrerHelper
 import com.swmansion.detour.signals.SignalCollector
 import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
-import com.swmansion.detour.storage.FirstLaunchDetector
+import com.swmansion.detour.storage.InstallStore
 import com.swmansion.detour.utils.UrlHelpers
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -61,7 +63,8 @@ object Detour {
     private lateinit var apiClient: DetourApiClient
     private lateinit var signalCollector: SignalCollector
     private lateinit var installReferrerHelper: InstallReferrerHelper
-    private lateinit var firstLaunchDetector: FirstLaunchDetector
+    private lateinit var installStore: InstallStore
+    private lateinit var userIdStore: UserIdStore
 
     /**
      * Initialize Detour SDK.
@@ -91,14 +94,44 @@ object Detour {
         this.apiClient = DetourApiClient(config, context.applicationContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
-        this.firstLaunchDetector = FirstLaunchDetector(storage)
+        this.installStore = InstallStore(context.applicationContext.noBackupFilesDir, storage)
+        this.userIdStore = UserIdStore(storage)
 
         // Initialize analytics subsystem
-        DetourAnalytics.initialize(config, storage)
+        DetourAnalytics.initialize(config, installStore, userIdStore)
         DetourAnalytics.logAppOpenIfNeeded()
 
         this.isInitialized = true
         Log.d(TAG, "SDK initialized")
+    }
+
+    /**
+     * Set the app's own user identifier, sent with every later request. `null` removes it.
+     * Must not be an e-mail address or a phone number.
+     *
+     * Call after [initialize]; [DetourConfig.userIdValidator] runs on every value.
+     */
+    @JvmStatic
+    fun setUserId(userId: String?) {
+        if (!isInitialized) {
+            Log.w(TAG, "SDK not initialized. Call Detour.initialize() first.")
+            return
+        }
+
+        if (userId == null) {
+            userIdStore.set(null)
+            return
+        }
+
+        // A rejected value also clears the previous one, so requests never go out
+        // with the identifier of the user the app has just switched away from.
+        if (!UserIdPolicy.isAllowed(userId) || config.userIdValidator?.invoke(userId) == false) {
+            Log.w(TAG, "[Detour:IDENTITY] setUserId value rejected by the validator; not stored or sent.")
+            userIdStore.set(null)
+            return
+        }
+
+        userIdStore.set(userId)
     }
 
     /**
@@ -132,7 +165,7 @@ object Detour {
 
                     if (UrlHelpers.isWebUrl(uriString)) {
                         // Mark first entrance so subsequent launches don't try deferred matching
-                        firstLaunchDetector.markAsLaunched()
+                        installStore.markFirstLaunchHandled()
                         return processUniversalLink(uri)
                     }
 
@@ -263,24 +296,27 @@ object Detour {
         }
 
         // Check if first launch
-        if (!firstLaunchDetector.isFirstLaunch()) {
+        if (!installStore.isFirstLaunch()) {
             Log.d(TAG, "Not first launch")
             return LinkResult.NotFirstLaunch
         }
 
         // Mark as launched
-        firstLaunchDetector.markAsLaunched()
+        installStore.markFirstLaunchHandled()
         Log.d(TAG, "First launch detected, processing deferred link")
 
         // Try to get click ID from install referrer (direct matching)
         val clickId = installReferrerHelper.getClickId()
 
+        val deviceId = installStore.getDeviceId()
+        val userId = userIdStore.current()
+
         val link: String? = if (clickId != null) {
             Log.d(TAG, "Using direct matching with click_id")
-            apiClient.matchLink(DirectMatchRequest(clickId))
+            apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId))
         } else {
             Log.d(TAG, "The click_id not found, using signal-based matching")
-            apiClient.matchLink(signalCollector.collectSignals())
+            apiClient.matchLink(signalCollector.collectSignals().copy(deviceId = deviceId, userId = userId))
         }
 
         if (link == null) {

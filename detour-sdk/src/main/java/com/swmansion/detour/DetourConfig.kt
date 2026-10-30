@@ -13,13 +13,17 @@ import com.swmansion.detour.storage.DetourStorage
  *                   Defaults to SharedPreferences-based storage.
  * @property baseUrl Detour API host for tests and non-production environments (https only).
  *                   `null` uses the production Detour API.
+ * @property userIdValidator Called on [Detour.setUserId]; returning `false` drops the value and clears
+ *                   the stored one. Use it to reject values that must not leave the device, such as
+ *                   e-mail addresses or phone numbers.
  */
 data class DetourConfig(
     val apiKey: String,
     val appId: String,
     val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
     val storage: DetourStorage? = null,
-    val baseUrl: String? = null
+    val baseUrl: String? = null,
+    val userIdValidator: ((String) -> Boolean)? = null
 ) {
     /**
      * Builder for Java callers (data class defaults don't work from Java).
@@ -34,17 +38,20 @@ data class DetourConfig(
         private var linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL
         private var storage: DetourStorage? = null
         private var baseUrl: String? = null
+        private var userIdValidator: ((String) -> Boolean)? = null
 
         fun linkProcessingMode(value: LinkProcessingMode) = apply { linkProcessingMode = value }
         fun storage(value: DetourStorage) = apply { storage = value }
         fun baseUrl(value: String) = apply { baseUrl = value }
+        fun userIdValidator(value: (String) -> Boolean) = apply { userIdValidator = value }
 
         fun build(): DetourConfig = DetourConfig(
             apiKey = apiKey,
             appId = appId,
             linkProcessingMode = linkProcessingMode,
             storage = storage,
-            baseUrl = baseUrl
+            baseUrl = baseUrl,
+            userIdValidator = userIdValidator
         )
     }
 }

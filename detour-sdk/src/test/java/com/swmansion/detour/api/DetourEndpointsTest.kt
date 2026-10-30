@@ -112,8 +112,8 @@ class ApiClientsBaseUrlTest {
         apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
-        analyticsClient.sendEvent("test", null, "device")
-        analyticsClient.sendRetentionEvent("app_open", "device")
+        analyticsClient.sendEvent("test", null, "device", null)
+        analyticsClient.sendRetentionEvent("app_open", "device", null)
     }
 
     @Test

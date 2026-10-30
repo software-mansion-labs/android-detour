@@ -160,7 +160,7 @@ Use `DEFERRED_ONLY` when your navigation framework already handles App Links and
 
 ### Custom storage
 
-The SDK uses `SharedPreferences` by default. You can provide a custom storage implementation via `DetourConfig`:
+The SDK uses `SharedPreferences` by default. You can provide a custom storage implementation via `DetourConfig`. The device ID and the first-launch flag never use it: they live in a file in `noBackupFilesDir`, so a reinstall or a restored phone gets a new device ID.
 
 <details>
 <summary>Custom storage example</summary>
@@ -211,6 +211,14 @@ DetourAnalytics.logRetention("week_1")
 
 </details>
 
+To link events to your own user account, pass your user identifier after the user signs in, and `null` after sign-out. Do not pass an e-mail address or a phone number.
+
+```kotlin
+Detour.setUserId("u_12345")
+// ...
+Detour.setUserId(null)
+```
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types
@@ -240,7 +248,10 @@ data class DetourConfig(
     val storage: DetourStorage? = null,
 
     /** Detour API host for tests and non-production environments (default: null = production Detour API). */
-    val baseUrl: String? = null
+    val baseUrl: String? = null,
+
+    /** Check for setUserId values; returning false drops the value and clears the stored one (default: null). */
+    val userIdValidator: ((String) -> Boolean)? = null
 )
 ```
 
@@ -336,6 +347,9 @@ object Detour {
 
     /** Resolve a short link URL to its full data. */
     suspend fun resolveShortLink(url: String): ShortLinkResponse?
+
+    /** Set the app's user identifier sent with later requests; null removes it. */
+    fun setUserId(userId: String?)
 }
 ```
 
