@@ -1,6 +1,7 @@
 package com.swmansion.detour.referrer
 
 import android.content.Context
+import com.swmansion.detour.models.ReferrerUtm
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -60,5 +61,41 @@ class InstallReferrerHelperTest {
         val referrer = "click_id=solo789"
         val result = helper.extractClickId(referrer)
         assertEquals("solo789", result)
+    }
+
+    @Test
+    fun `buildDetails - reads every field and keeps the gclid case`() {
+        val raw = "utm_source=google&utm_medium=cpc&gclid=AbC.123&click_id=x"
+
+        val details = helper.buildDetails(
+            raw = raw,
+            clickTs = 1_730_000_000,
+            installBeginTs = 1_730_000_030,
+            clickTsServer = 1_730_000_001,
+            installBeginTsServer = 1_730_000_031,
+            googlePlayInstant = true,
+        )
+
+        assertEquals(raw, details.raw)
+        assertEquals(ReferrerUtm("google", "cpc", null, null, null), details.utm)
+        assertEquals("AbC.123", details.gclid)
+        assertEquals("x", details.clickId)
+        assertEquals(1_730_000_000, details.clickTs)
+        assertEquals(1_730_000_030, details.installBeginTs)
+        assertEquals(1_730_000_001, details.clickTsServer)
+        assertEquals(1_730_000_031, details.installBeginTsServer)
+        assertEquals(true, details.googlePlayInstant)
+    }
+
+    @Test
+    fun `buildDetails - no utm parameters leaves utm out`() {
+        assertNull(helper.buildDetails(
+            raw = "click_id=x",
+            clickTs = 0,
+            installBeginTs = 0,
+            clickTsServer = 0,
+            installBeginTsServer = 0,
+            googlePlayInstant = false,
+        ).utm)
     }
 }

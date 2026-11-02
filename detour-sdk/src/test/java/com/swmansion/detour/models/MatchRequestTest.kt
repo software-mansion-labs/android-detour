@@ -24,4 +24,29 @@ class MatchRequestTest {
     fun `user_id is omitted when not set`() {
         assertFalse(json(DirectMatchRequest("c_1", "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01")).has("user_id"))
     }
+
+    @Test
+    fun `install_referrer uses contract names and leaves out clickId`() {
+        val referrer = InstallReferrerDetails(
+            raw = "gclid=AbC.123&click_id=c_1",
+            utm = null,
+            gclid = "AbC.123",
+            clickTs = 1,
+            installBeginTs = 2,
+            clickTsServer = 3,
+            installBeginTsServer = 4,
+            googlePlayInstant = false,
+            clickId = "c_1",
+        )
+
+        val body = json(DirectMatchRequest("c_1", installReferrer = referrer))["install_referrer"].asJsonObject
+
+        assertEquals(
+            setOf(
+                "raw", "gclid", "click_ts", "install_begin_ts",
+                "click_ts_server", "install_begin_ts_server", "google_play_instant",
+            ),
+            body.keySet(),
+        )
+    }
 }
