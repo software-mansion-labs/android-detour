@@ -51,7 +51,10 @@ data class SignalMatchRequest(
     val deviceId: String? = null,
 
     @SerializedName("user_id")
-    val userId: String? = null
+    val userId: String? = null,
+
+    @SerializedName("install_referrer")
+    val installReferrer: InstallReferrerDetails? = null
 ) : MatchRequest
 
 /**
@@ -65,7 +68,10 @@ data class DirectMatchRequest(
     val deviceId: String? = null,
 
     @SerializedName("user_id")
-    val userId: String? = null
+    val userId: String? = null,
+
+    @SerializedName("install_referrer")
+    val installReferrer: InstallReferrerDetails? = null
 ) : MatchRequest
 
 /**

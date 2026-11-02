@@ -6,5 +6,7 @@
 -keep class com.swmansion.detour.models.SignalMatchRequest { *; }
 -keep class com.swmansion.detour.models.DirectMatchRequest { *; }
 -keep class com.swmansion.detour.models.LocaleInfo { *; }
+-keep class com.swmansion.detour.models.InstallReferrerDetails { *; }
+-keep class com.swmansion.detour.models.ReferrerUtm { *; }
 -keep class com.swmansion.detour.models.LinkMatchResponse { *; }
 -keep class com.swmansion.detour.models.ShortLinkResponse { *; }
