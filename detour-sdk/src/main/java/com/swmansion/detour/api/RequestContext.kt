@@ -18,6 +18,7 @@ internal data class RequestContext(
     val installSource: String? = null,
     val networkType: String? = null,
     val locale: String? = null,
+    val sessionId: String? = null,
 ) {
     /** match-link keeps `locale` as its v1 array of device signals. */
     fun forMatchLink(): RequestContext = copy(locale = null)
@@ -29,10 +30,14 @@ internal data class RequestContext(
         installSource?.let { "install_source" to it },
         networkType?.let { "network_type" to it },
         locale?.let { "locale" to it },
+        sessionId?.let { "session_id" to it },
     ).toMap()
 }
 
-internal class RequestContextProvider(private val context: Context) {
+internal class RequestContextProvider(
+    private val context: Context,
+    private val sessionId: () -> String? = { null },
+) {
 
     private val packageInfo: PackageInfo? by lazy {
         runCatching {
@@ -63,6 +68,7 @@ internal class RequestContextProvider(private val context: Context) {
         installSource = installSource,
         networkType = networkType(),
         locale = Locale.getDefault().toLanguageTag(),
+        sessionId = sessionId(),
     )
 
     private fun versionCode(info: PackageInfo): String =

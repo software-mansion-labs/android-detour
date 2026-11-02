@@ -1,6 +1,8 @@
 package com.swmansion.detour.api
 
 import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.analytics.AnalyticsRequest
+import com.swmansion.detour.analytics.SessionManager
 import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
@@ -32,6 +34,7 @@ class DetourEndpointsTest {
             DetourEndpoint.UNIVERSAL_LINK_CLICK to "https://godetour.dev/api/link/universal-link-click",
             DetourEndpoint.ANALYTICS_EVENT to "https://godetour.dev/api/analytics/event",
             DetourEndpoint.ANALYTICS_RETENTION to "https://godetour.dev/api/analytics/retention",
+            DetourEndpoint.ANALYTICS_SESSION to "https://godetour.dev/api/analytics/session",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -114,8 +117,11 @@ class ApiClientsBaseUrlTest {
         apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
-        analyticsClient.sendEvent("test", null, "device", null)
-        analyticsClient.sendRetentionEvent("app_open", "device", null)
+        listOf(
+            AnalyticsRequest.Event("test", null),
+            AnalyticsRequest.Retention("app_open"),
+            AnalyticsRequest.Session(SessionManager.Event.Start("8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", 0)),
+        ).forEach { analyticsClient.send(it, "device", null) }
     }
 
     @Test

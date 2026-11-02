@@ -11,6 +11,7 @@ internal enum class DetourEndpoint(val path: String) {
     UNIVERSAL_LINK_CLICK("api/link/universal-link-click"),
     ANALYTICS_EVENT("api/analytics/event"),
     ANALYTICS_RETENTION("api/analytics/retention"),
+    ANALYTICS_SESSION("api/analytics/session"),
 }
 
 internal object DetourEndpoints {

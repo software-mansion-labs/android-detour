@@ -219,6 +219,8 @@ Detour.setUserId("u_12345")
 Detour.setUserId(null)
 ```
 
+Sessions are reported automatically after `Detour.initialize()`: the start and end of each use of the app with its duration, under a random session ID kept in memory only. More than 30 minutes in the background starts a new session.
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types

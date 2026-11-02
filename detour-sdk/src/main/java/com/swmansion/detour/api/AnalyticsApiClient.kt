@@ -1,7 +1,10 @@
 package com.swmansion.detour.api
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.analytics.AnalyticsRequest
+import com.swmansion.detour.analytics.SessionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -14,98 +17,87 @@ import java.util.TimeZone
 /**
  * API client for Detour analytics endpoints.
  *
- * All methods are fire-and-forget: they log warnings on failure and never throw.
+ * Fire-and-forget: it logs warnings on failure and never throws.
  */
 internal class AnalyticsApiClient(
     private val config: DetourConfig,
     private val requestContext: RequestContextProvider,
 ) {
 
-    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
+    suspend fun send(request: AnalyticsRequest, deviceId: String, userId: String?) = withContext(Dispatchers.IO) {
+        val endpoint = endpointOf(request)
+        val url = DetourEndpoints.url(endpoint, config) ?: return@withContext
+        try {
+            val json = HttpClient.gson.toJson(body(request, requestContext.current(), deviceId, userId))
+            val httpRequest = Request.Builder()
+                .url(url)
+                .post(json.toRequestBody(HttpClient.JSON))
+                .detourHeaders(config)
+                .build()
+
+            HttpClient.okHttp.newCall(httpRequest).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "[Detour:ANALYTICS] ${endpoint.path} send failed: ${response.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[Detour:ANALYTICS] ${endpoint.path} send exception", e)
+        }
     }
-
-    /**
-     * Send an analytics event.
-     *
-     * @param eventName Name of the event
-     * @param data Optional event data
-     * @param deviceId Persistent device identifier
-     * @param userId The app's user identifier, if set
-     */
-    suspend fun sendEvent(eventName: String, data: Any?, deviceId: String, userId: String?) =
-        withContext(Dispatchers.IO) {
-            val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_EVENT, config) ?: return@withContext
-            try {
-                val payload = buildMap<String, Any?> {
-                    putAll(requestContext.current().toMap())
-                    put("event_name", eventName)
-                    put("data", data)
-                    put("timestamp", isoFormat.format(Date()))
-                    put("platform", "android")
-                    put("device_id", deviceId)
-                    if (userId != null) put("user_id", userId)
-                }
-
-                val json = HttpClient.gson.toJson(payload)
-                val requestBody = json.toRequestBody(HttpClient.JSON)
-
-                val request = Request.Builder()
-                    .url(url)
-                    .post(requestBody)
-                    .detourHeaders(config)
-                    .build()
-
-                HttpClient.okHttp.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.w(TAG, "[Detour:ANALYTICS] Event send failed: ${response.code}")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "[Detour:ANALYTICS] Event send exception", e)
-            }
-        }
-
-    /**
-     * Send a retention event.
-     *
-     * @param eventName Name of the retention event
-     * @param deviceId Persistent device identifier
-     * @param userId The app's user identifier, if set
-     */
-    suspend fun sendRetentionEvent(eventName: String, deviceId: String, userId: String?) =
-        withContext(Dispatchers.IO) {
-            val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_RETENTION, config) ?: return@withContext
-            try {
-                val payload = buildMap<String, Any> {
-                    putAll(requestContext.current().toMap())
-                    put("event_name", eventName)
-                    put("timestamp", isoFormat.format(Date()))
-                    put("platform", "android")
-                    put("device_id", deviceId)
-                    if (userId != null) put("user_id", userId)
-                }
-
-                val json = HttpClient.gson.toJson(payload)
-                val requestBody = json.toRequestBody(HttpClient.JSON)
-
-                val request = Request.Builder()
-                    .url(url)
-                    .post(requestBody)
-                    .detourHeaders(config)
-                    .build()
-
-                HttpClient.okHttp.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.w(TAG, "[Detour:ANALYTICS] Retention send failed: ${response.code}")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "[Detour:ANALYTICS] Retention send exception", e)
-            }
-        }
 
     companion object {
         private const val TAG = "AnalyticsApiClient"
+
+        private fun endpointOf(request: AnalyticsRequest): DetourEndpoint = when (request) {
+            is AnalyticsRequest.Event -> DetourEndpoint.ANALYTICS_EVENT
+            is AnalyticsRequest.Retention -> DetourEndpoint.ANALYTICS_RETENTION
+            is AnalyticsRequest.Session -> DetourEndpoint.ANALYTICS_SESSION
+        }
+
+        private fun timestamp(atMs: Long = System.currentTimeMillis()): String =
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+                .apply { timeZone = TimeZone.getTimeZone("UTC") }
+                .format(Date(atMs))
+
+        private fun fieldsOf(request: AnalyticsRequest): Map<String, Any?> = when (request) {
+            is AnalyticsRequest.Event -> mapOf(
+                "event_name" to request.name,
+                "data" to request.data,
+                "timestamp" to timestamp(),
+                "platform" to "android",
+            )
+            is AnalyticsRequest.Retention -> mapOf(
+                "event_name" to request.name,
+                "timestamp" to timestamp(),
+                "platform" to "android",
+            )
+            is AnalyticsRequest.Session -> when (val event = request.event) {
+                is SessionManager.Event.Start -> mapOf(
+                    "type" to "start",
+                    "session_id" to event.sessionId,
+                    "timestamp" to timestamp(event.atMs),
+                )
+                is SessionManager.Event.End -> mapOf(
+                    "type" to "end",
+                    "session_id" to event.sessionId,
+                    "timestamp" to timestamp(event.atMs),
+                    "duration_ms" to event.durationMs,
+                )
+            }
+        }
+
+        /** Context, then the request's own fields, which win on a shared name, then the identity. */
+        @VisibleForTesting
+        internal fun body(
+            request: AnalyticsRequest,
+            context: RequestContext,
+            deviceId: String,
+            userId: String?,
+        ): Map<String, Any?> = buildMap {
+            putAll(context.toMap())
+            putAll(fieldsOf(request))
+            put("device_id", deviceId)
+            if (userId != null) put("user_id", userId)
+        }
     }
 }

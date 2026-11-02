@@ -92,7 +92,9 @@ object Detour {
         this.config = config
         DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
-        val requestContext = RequestContextProvider(context.applicationContext)
+        val requestContext = RequestContextProvider(context.applicationContext) {
+            DetourAnalytics.sessionManager.currentSessionId
+        }
         this.apiClient = DetourApiClient(config, context.applicationContext, requestContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
