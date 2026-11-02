@@ -106,8 +106,10 @@ class ApiClientsBaseUrlTest {
     }
 
     private suspend fun callEveryEndpoint(config: DetourConfig) {
-        val apiClient = DetourApiClient(config, RuntimeEnvironment.getApplication())
-        val analyticsClient = AnalyticsApiClient(config)
+        val app = RuntimeEnvironment.getApplication()
+        val requestContext = RequestContextProvider(app)
+        val apiClient = DetourApiClient(config, app, requestContext)
+        val analyticsClient = AnalyticsApiClient(config, requestContext)
 
         apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")

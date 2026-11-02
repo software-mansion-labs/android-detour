@@ -1,9 +1,12 @@
 package com.swmansion.detour.api
 
 import com.google.gson.Gson
+import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.FlutterSdkHeaderResolver
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 /**
@@ -31,3 +34,13 @@ internal object HttpClient {
 
     val JSON: MediaType = "application/json; charset=utf-8".toMediaType()
 }
+
+// `mmp` comes with attribution mode; the core SDK always reports `core`.
+private const val SDK_PACKAGE = "core"
+
+internal fun Request.Builder.detourHeaders(config: DetourConfig): Request.Builder = this
+    .addHeader("Content-Type", "application/json")
+    .addHeader("Authorization", "Bearer ${config.apiKey}")
+    .addHeader("X-App-ID", config.appId)
+    .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+    .addHeader("X-SDK-Package", SDK_PACKAGE)

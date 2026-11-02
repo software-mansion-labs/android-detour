@@ -3,6 +3,7 @@ package com.swmansion.detour.analytics
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.api.AnalyticsApiClient
+import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.storage.InstallStore
 import kotlinx.coroutines.CoroutineScope
@@ -35,8 +36,13 @@ object DetourAnalytics {
     /**
      * Internal — called from [com.swmansion.detour.Detour.initialize].
      */
-    internal fun initialize(config: DetourConfig, installStore: InstallStore, userIdStore: UserIdStore) {
-        apiClient = AnalyticsApiClient(config)
+    internal fun initialize(
+        config: DetourConfig,
+        requestContext: RequestContextProvider,
+        installStore: InstallStore,
+        userIdStore: UserIdStore,
+    ) {
+        apiClient = AnalyticsApiClient(config, requestContext)
         this.installStore = installStore
         this.userIdStore = userIdStore
         isInitialized = true

@@ -2,7 +2,6 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import com.swmansion.detour.DetourConfig
-import com.swmansion.detour.FlutterSdkHeaderResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -17,7 +16,10 @@ import java.util.TimeZone
  *
  * All methods are fire-and-forget: they log warnings on failure and never throw.
  */
-internal class AnalyticsApiClient(private val config: DetourConfig) {
+internal class AnalyticsApiClient(
+    private val config: DetourConfig,
+    private val requestContext: RequestContextProvider,
+) {
 
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
@@ -36,6 +38,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
             val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_EVENT, config) ?: return@withContext
             try {
                 val payload = buildMap<String, Any?> {
+                    putAll(requestContext.current().toMap())
                     put("event_name", eventName)
                     put("data", data)
                     put("timestamp", isoFormat.format(Date()))
@@ -50,10 +53,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                 val request = Request.Builder()
                     .url(url)
                     .post(requestBody)
-                    .addHeader("Content-Type", "application/json")
-                    .addHeader("Authorization", "Bearer ${config.apiKey}")
-                    .addHeader("X-App-ID", config.appId)
-                    .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+                    .detourHeaders(config)
                     .build()
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->
@@ -78,6 +78,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
             val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_RETENTION, config) ?: return@withContext
             try {
                 val payload = buildMap<String, Any> {
+                    putAll(requestContext.current().toMap())
                     put("event_name", eventName)
                     put("timestamp", isoFormat.format(Date()))
                     put("platform", "android")
@@ -91,10 +92,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                 val request = Request.Builder()
                     .url(url)
                     .post(requestBody)
-                    .addHeader("Content-Type", "application/json")
-                    .addHeader("Authorization", "Bearer ${config.apiKey}")
-                    .addHeader("X-App-ID", config.appId)
-                    .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+                    .detourHeaders(config)
                     .build()
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->
