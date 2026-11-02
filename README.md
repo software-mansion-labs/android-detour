@@ -219,6 +219,22 @@ Detour.setUserId("u_12345")
 Detour.setUserId(null)
 ```
 
+To report revenue, log a conversion. Use `RevenueType.IAP` for purchases and subscriptions and `RevenueType.IN_APP_ADS` for ad revenue; pass the store's order ID so a repeated purchase is counted once. `logEvent(DetourEventNames.Purchase)` with a `revenue` value is deprecated and does not count as revenue.
+
+```kotlin
+DetourAnalytics.logConversion(
+    DetourConversion(
+        name = "purchase",
+        revenue = BigDecimal("4.99"),
+        currency = "USD",
+        revenueType = RevenueType.IAP,
+        productId = "coins_500",
+        quantity = 1,
+        transactionId = purchase.orderId,
+    )
+)
+```
+
 Sessions are reported automatically after `Detour.initialize()`: the start and end of each use of the app with its duration, under a random session ID kept in memory only. More than 30 minutes in the background starts a new session.
 
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
@@ -384,6 +400,9 @@ class DetourDelegate(
 object DetourAnalytics {
     /** Log a predefined analytics event with optional data. */
     fun logEvent(eventName: DetourEventNames, data: Any? = null)
+
+    /** Log a conversion with revenue. */
+    fun logConversion(conversion: DetourConversion)
 
     /** Log a retention event. */
     fun logRetention(eventName: String)

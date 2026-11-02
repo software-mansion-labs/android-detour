@@ -2,6 +2,8 @@ package com.swmansion.detour.api
 
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.analytics.AnalyticsRequest
+import com.swmansion.detour.analytics.DetourConversion
+import com.swmansion.detour.analytics.RevenueType
 import com.swmansion.detour.analytics.SessionManager
 import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
@@ -19,6 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import java.math.BigDecimal
 import java.util.Collections
 
 @RunWith(RobolectricTestRunner::class)
@@ -35,6 +38,7 @@ class DetourEndpointsTest {
             DetourEndpoint.ANALYTICS_EVENT to "https://godetour.dev/api/analytics/event",
             DetourEndpoint.ANALYTICS_RETENTION to "https://godetour.dev/api/analytics/retention",
             DetourEndpoint.ANALYTICS_SESSION to "https://godetour.dev/api/analytics/session",
+            DetourEndpoint.ANALYTICS_CONVERSION to "https://godetour.dev/api/analytics/conversion",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -121,6 +125,7 @@ class ApiClientsBaseUrlTest {
             AnalyticsRequest.Event("test", null),
             AnalyticsRequest.Retention("app_open"),
             AnalyticsRequest.Session(SessionManager.Event.Start("8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", 0)),
+            AnalyticsRequest.Conversion(DetourConversion("purchase", BigDecimal("4.99"), "USD", RevenueType.IAP), 0),
         ).forEach { analyticsClient.send(it, "device", null) }
     }
 

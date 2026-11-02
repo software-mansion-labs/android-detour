@@ -65,6 +65,13 @@ object DetourAnalytics {
     @JvmStatic
     @JvmOverloads
     fun logEvent(eventName: DetourEventNames, data: Any? = null) {
+        if (eventName == DetourEventNames.Purchase && (data as? Map<*, *>)?.containsKey("revenue") == true) {
+            Log.w(
+                TAG,
+                "[Detour:DEPRECATION] Revenue in logEvent(Purchase) is deprecated and not counted as revenue. " +
+                    "Use logConversion instead."
+            )
+        }
         send(AnalyticsRequest.Event(eventName.eventName, data))
     }
 
@@ -76,6 +83,14 @@ object DetourAnalytics {
     @JvmStatic
     fun logRetention(eventName: String) {
         send(AnalyticsRequest.Retention(eventName))
+    }
+
+    /**
+     * Log a conversion with revenue, e.g. a purchase or ad revenue.
+     */
+    @JvmStatic
+    fun logConversion(conversion: DetourConversion) {
+        send(AnalyticsRequest.Conversion(conversion, System.currentTimeMillis()))
     }
 
     private fun send(request: AnalyticsRequest) {

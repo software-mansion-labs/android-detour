@@ -52,6 +52,7 @@ internal class AnalyticsApiClient(
             is AnalyticsRequest.Event -> DetourEndpoint.ANALYTICS_EVENT
             is AnalyticsRequest.Retention -> DetourEndpoint.ANALYTICS_RETENTION
             is AnalyticsRequest.Session -> DetourEndpoint.ANALYTICS_SESSION
+            is AnalyticsRequest.Conversion -> DetourEndpoint.ANALYTICS_CONVERSION
         }
 
         private fun timestamp(atMs: Long = System.currentTimeMillis()): String =
@@ -82,6 +83,19 @@ internal class AnalyticsApiClient(
                     "session_id" to event.sessionId,
                     "timestamp" to timestamp(event.atMs),
                     "duration_ms" to event.durationMs,
+                )
+            }
+            is AnalyticsRequest.Conversion -> with(request.conversion) {
+                mapOf(
+                    "name" to name,
+                    // Gson writes BigDecimal as is, so 0.001234 does not turn into 0.0012339999...
+                    "revenue" to revenue,
+                    "currency" to currency,
+                    "revenue_type" to revenueType.wireName,
+                    "product_id" to productId,
+                    "quantity" to quantity,
+                    "transaction_id" to transactionId,
+                    "timestamp" to timestamp(request.atMs),
                 )
             }
         }
