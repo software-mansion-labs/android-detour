@@ -1,11 +1,17 @@
 package com.swmansion.detour.api
 
+import com.swmansion.detour.DetourAttributionConfig
 import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.analytics.AnalyticsRequest
+import com.swmansion.detour.analytics.DetourConversion
+import com.swmansion.detour.analytics.RevenueType
+import com.swmansion.detour.analytics.SessionManager
 import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
@@ -17,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import java.math.BigDecimal
 import java.util.Collections
 
 @RunWith(RobolectricTestRunner::class)
@@ -32,6 +39,8 @@ class DetourEndpointsTest {
             DetourEndpoint.UNIVERSAL_LINK_CLICK to "https://godetour.dev/api/link/universal-link-click",
             DetourEndpoint.ANALYTICS_EVENT to "https://godetour.dev/api/analytics/event",
             DetourEndpoint.ANALYTICS_RETENTION to "https://godetour.dev/api/analytics/retention",
+            DetourEndpoint.ANALYTICS_SESSION to "https://godetour.dev/api/analytics/session",
+            DetourEndpoint.ANALYTICS_CONVERSION to "https://godetour.dev/api/analytics/conversion",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -63,6 +72,18 @@ class DetourEndpointsTest {
         assertNull(DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config("http://localhost:3000")))
         assertNull(DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config("ftp://example.com")))
         assertNull(DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config("not a url")))
+    }
+
+    @Test
+    fun `requests report the core package unless attribution is set`() {
+        fun packageHeader(config: DetourConfig) =
+            Request.Builder().url("https://api.example.com").detourHeaders(config).build().header("X-SDK-Package")
+
+        assertEquals("core", packageHeader(config(null)))
+        assertEquals(
+            "mmp",
+            packageHeader(DetourConfig.Builder("key", "app").attribution(DetourAttributionConfig()).build())
+        )
     }
 
     @Test
@@ -106,14 +127,20 @@ class ApiClientsBaseUrlTest {
     }
 
     private suspend fun callEveryEndpoint(config: DetourConfig) {
-        val apiClient = DetourApiClient(config, RuntimeEnvironment.getApplication())
-        val analyticsClient = AnalyticsApiClient(config)
+        val app = RuntimeEnvironment.getApplication()
+        val requestContext = RequestContextProvider(app)
+        val apiClient = DetourApiClient(config, app, requestContext)
+        val analyticsClient = AnalyticsApiClient(config, requestContext)
 
         apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
-        analyticsClient.sendEvent("test", null, "device", null)
-        analyticsClient.sendRetentionEvent("app_open", "device", null)
+        listOf(
+            AnalyticsRequest.Event("test", null),
+            AnalyticsRequest.Retention("app_open"),
+            AnalyticsRequest.Session(SessionManager.Event.Start("8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", 0)),
+            AnalyticsRequest.Conversion(DetourConversion("purchase", BigDecimal("4.99"), "USD", RevenueType.IAP), 0),
+        ).forEach { analyticsClient.send(it, "device", null) }
     }
 
     @Test

@@ -1,8 +1,14 @@
 package com.swmansion.detour.analytics
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.api.AnalyticsApiClient
+import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.storage.InstallStore
 import kotlinx.coroutines.CoroutineScope
@@ -32,14 +38,22 @@ object DetourAnalytics {
     @Volatile
     private var appOpenFired = false
 
+    internal val sessionManager = SessionManager()
+
     /**
      * Internal — called from [com.swmansion.detour.Detour.initialize].
      */
-    internal fun initialize(config: DetourConfig, installStore: InstallStore, userIdStore: UserIdStore) {
-        apiClient = AnalyticsApiClient(config)
+    internal fun initialize(
+        config: DetourConfig,
+        requestContext: RequestContextProvider,
+        installStore: InstallStore,
+        userIdStore: UserIdStore,
+    ) {
+        apiClient = AnalyticsApiClient(config, requestContext)
         this.installStore = installStore
         this.userIdStore = userIdStore
         isInitialized = true
+        startSessions()
     }
 
     /**
@@ -51,18 +65,14 @@ object DetourAnalytics {
     @JvmStatic
     @JvmOverloads
     fun logEvent(eventName: DetourEventNames, data: Any? = null) {
-        if (!isInitialized) {
-            Log.w(TAG, "[Detour:ANALYTICS] Analytics not initialized — call Detour.initialize() first")
-            return
+        if (eventName == DetourEventNames.Purchase && (data as? Map<*, *>)?.containsKey("revenue") == true) {
+            Log.w(
+                TAG,
+                "[Detour:DEPRECATION] Revenue in logEvent(Purchase) is deprecated and not counted as revenue. " +
+                    "Use logConversion instead."
+            )
         }
-
-        scope.launch {
-            try {
-                apiClient.sendEvent(eventName.eventName, data, installStore.getDeviceId(), userIdStore.current())
-            } catch (e: Exception) {
-                Log.w(TAG, "[Detour:ANALYTICS] logEvent failed", e)
-            }
-        }
+        send(AnalyticsRequest.Event(eventName.eventName, data))
     }
 
     /**
@@ -72,6 +82,18 @@ object DetourAnalytics {
      */
     @JvmStatic
     fun logRetention(eventName: String) {
+        send(AnalyticsRequest.Retention(eventName))
+    }
+
+    /**
+     * Log a conversion with revenue, e.g. a purchase or ad revenue.
+     */
+    @JvmStatic
+    fun logConversion(conversion: DetourConversion) {
+        send(AnalyticsRequest.Conversion(conversion, System.currentTimeMillis()))
+    }
+
+    private fun send(request: AnalyticsRequest) {
         if (!isInitialized) {
             Log.w(TAG, "[Detour:ANALYTICS] Analytics not initialized — call Detour.initialize() first")
             return
@@ -79,10 +101,22 @@ object DetourAnalytics {
 
         scope.launch {
             try {
-                apiClient.sendRetentionEvent(eventName, installStore.getDeviceId(), userIdStore.current())
+                apiClient.send(request, installStore.getDeviceId(), userIdStore.current())
             } catch (e: Exception) {
-                Log.w(TAG, "[Detour:ANALYTICS] logRetention failed", e)
+                Log.w(TAG, "[Detour:ANALYTICS] Sending ${request::class.simpleName} failed", e)
             }
+        }
+    }
+
+    private fun startSessions() {
+        sessionManager.start { event -> send(AnalyticsRequest.Session(event)) }
+        // ProcessLifecycleOwner must be observed from the main thread; it replays ON_START
+        // when the app is already in the foreground.
+        Handler(Looper.getMainLooper()).post {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) = sessionManager.onForeground()
+                override fun onStop(owner: LifecycleOwner) = sessionManager.onBackground()
+            })
         }
     }
 

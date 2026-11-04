@@ -3,8 +3,8 @@ package com.swmansion.detour.api
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.swmansion.detour.DetourConfig
-import com.swmansion.detour.FlutterSdkHeaderResolver
 import com.swmansion.detour.models.MatchRequest
 import com.swmansion.detour.models.LinkMatchResponse
 import com.swmansion.detour.models.ShortLinkResponse
@@ -17,7 +17,11 @@ import java.io.IOException
 /**
  * API client for Detour link-matching and short-link resolution.
  */
-internal class DetourApiClient(private val config: DetourConfig, private val context: Context) {
+internal class DetourApiClient(
+    private val config: DetourConfig,
+    private val context: Context,
+    private val requestContext: RequestContextProvider,
+) {
 
     /**
      * Match link using a direct or signal-based match request.
@@ -27,16 +31,13 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
      */
     suspend fun matchLink(request: MatchRequest): String? = withContext(Dispatchers.IO) {
         val url = DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config) ?: return@withContext null
-        val json = HttpClient.gson.toJson(request)
+        val json = matchLinkJson(request, requestContext.current())
         Log.d(TAG, "Sending match request to API")
 
         val request = Request.Builder()
             .url(url)
             .post(json.toRequestBody(HttpClient.JSON))
-            .addHeader("Content-Type", "application/json")
-            .addHeader("Authorization", "Bearer ${config.apiKey}")
-            .addHeader("X-App-ID", config.appId)
-            .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+            .detourHeaders(config)
             .build()
 
         HttpClient.okHttp.newCall(request).execute().use { response ->
@@ -74,10 +75,7 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
             val request = Request.Builder()
                 .url(endpoint)
                 .post(requestBody)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${config.apiKey}")
-                .addHeader("X-App-ID", config.appId)
-                .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+                .detourHeaders(config)
                 .build()
 
             HttpClient.okHttp.newCall(request).execute().use { response ->
@@ -133,10 +131,7 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
             val request = Request.Builder()
                 .url(endpoint)
                 .post(payload.toRequestBody(HttpClient.JSON))
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${config.apiKey}")
-                .addHeader("X-App-ID", config.appId)
-                .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+                .detourHeaders(config)
                 .build()
 
             HttpClient.shortTimeoutOkHttp.newCall(request).execute().use { response ->
@@ -187,5 +182,15 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
 
     companion object {
         private const val TAG = "DetourApiClient"
+
+        /** The request's own fields win over the context fields of the same name. */
+        @VisibleForTesting
+        internal fun matchLinkJson(request: MatchRequest, context: RequestContext): String {
+            val body = HttpClient.gson.toJsonTree(request).asJsonObject
+            for ((field, value) in context.forMatchLink().toMap()) {
+                if (!body.has(field)) body.addProperty(field, value)
+            }
+            return HttpClient.gson.toJson(body)
+        }
     }
 }
