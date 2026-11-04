@@ -9,6 +9,8 @@ import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.api.DetourEndpoints
 import com.swmansion.detour.api.SdkApiClient
+import com.swmansion.detour.consent.ConsentStore
+import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identity.UserIdPolicy
 import com.swmansion.detour.identity.UserIdStore
@@ -78,8 +80,11 @@ object Detour {
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
     private lateinit var sdkApiClient: SdkApiClient
-    internal lateinit var sdkConfigStore: SdkConfigStore
-        private set
+    private lateinit var sdkConfigStore: SdkConfigStore
+    private lateinit var consentStore: ConsentStore
+
+    /** A consent passed before [configure]; recorded and sent once the SDK is set up. */
+    private var consentBeforeConfigure: Pair<DetourConsent, String?>? = null
 
     /**
      * Sets up the SDK without sending user data. Call it once in Application.onCreate().
@@ -135,7 +140,39 @@ object Detour {
     // Once per launch, so a value changed on the server reaches the app on its next launch.
     private fun refreshSdkConfig() {
         scope.launch {
-            sdkConfigStore.apply(sdkApiClient.fetchConfig(sdkConfigStore.etag()))
+            if (sdkConfigStore.apply(sdkApiClient.fetchConfig(sdkConfigStore.etag()))) {
+                DetourAnalytics.reevaluateWaiting()
+            }
+        }
+    }
+
+    /**
+     * Passes the user's choice from your consent platform. Call it on every launch once the
+     * platform has the choice, not only when it changes: a choice stored on an earlier launch
+     * can stop requests for a purpose, but a grant counts only once passed again on this launch.
+     * Each call replaces the previous consent; pass every purpose in one call.
+     *
+     * @param consentText The text the user agreed to, stored once per version on the Detour server.
+     */
+    @JvmStatic
+    @JvmOverloads
+    @Synchronized
+    fun setConsent(consent: DetourConsent, consentText: String? = null) {
+        if (isInitialized) {
+            recordConsent(consent, consentText)
+        } else {
+            consentBeforeConfigure = consent to consentText
+        }
+    }
+
+    // Recorded before returning, so a request logged right after setConsent is decided by it.
+    private fun recordConsent(consent: DetourConsent, consentText: String?) {
+        val withSchema = consent.schemaVersion?.let { consent }
+            ?: consent.copy(schemaVersion = sdkConfigStore.latest.schemaVersion)
+        consentStore.record(withSchema)
+        DetourAnalytics.reevaluateWaiting()
+        scope.launch {
+            sdkApiClient.sendConsent(withSchema, consentText, installStore.getDeviceId(), userIdStore.current())
         }
     }
 
@@ -150,9 +187,12 @@ object Detour {
         this.config = config
         DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
-        val requestContext = RequestContextProvider(context.applicationContext) {
-            DetourAnalytics.sessionManager.currentSessionId
-        }
+        this.consentStore = ConsentStore(storage)
+        val requestContext = RequestContextProvider(
+            context.applicationContext,
+            sessionId = { DetourAnalytics.sessionManager.currentSessionId },
+            consentSnapshot = { consentStore.passedThisLaunch?.toWire() },
+        )
         this.apiClient = DetourApiClient(config, context.applicationContext, requestContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
@@ -162,9 +202,11 @@ object Detour {
         this.sdkConfigStore = SdkConfigStore(storage, config.appId)
         refreshSdkConfig()
 
-        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore)
+        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore, consentStore, sdkConfigStore)
 
         this.isInitialized = true
+        consentBeforeConfigure?.let { (consent, text) -> recordConsent(consent, text) }
+        consentBeforeConfigure = null
         Log.d(TAG, "SDK configured")
         return true
     }

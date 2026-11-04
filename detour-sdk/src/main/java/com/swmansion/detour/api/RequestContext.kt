@@ -19,11 +19,12 @@ internal data class RequestContext(
     val networkType: String? = null,
     val locale: String? = null,
     val sessionId: String? = null,
+    val consentSnapshot: Map<String, Any>? = null,
 ) {
     /** match-link keeps `locale` as its v1 array of device signals. */
     fun forMatchLink(): RequestContext = copy(locale = null)
 
-    fun toMap(): Map<String, String> = listOfNotNull(
+    fun toMap(): Map<String, Any> = listOfNotNull<Pair<String, Any>>(
         appVersion?.let { "app_version" to it },
         buildNumber?.let { "build_number" to it },
         osVersion?.let { "os_version" to it },
@@ -31,12 +32,14 @@ internal data class RequestContext(
         networkType?.let { "network_type" to it },
         locale?.let { "locale" to it },
         sessionId?.let { "session_id" to it },
+        consentSnapshot?.let { "consent_snapshot" to it },
     ).toMap()
 }
 
 internal class RequestContextProvider(
     private val context: Context,
     private val sessionId: () -> String? = { null },
+    private val consentSnapshot: () -> Map<String, Any>? = { null },
 ) {
 
     private val packageInfo: PackageInfo? by lazy {
@@ -69,6 +72,7 @@ internal class RequestContextProvider(
         networkType = networkType(),
         locale = Locale.getDefault().toLanguageTag(),
         sessionId = sessionId(),
+        consentSnapshot = consentSnapshot(),
     )
 
     private fun versionCode(info: PackageInfo): String =

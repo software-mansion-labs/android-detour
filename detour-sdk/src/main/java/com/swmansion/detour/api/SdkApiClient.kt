@@ -2,11 +2,14 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import com.swmansion.detour.DetourConfig
+import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.SdkConfigStore.FetchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.CacheControl
+import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /** Requests to the `api/sdk/` endpoints. */
 internal class SdkApiClient(private val config: DetourConfig) {
@@ -38,6 +41,37 @@ internal class SdkApiClient(private val config: DetourConfig) {
         } catch (e: Exception) {
             Log.w(TAG, "[Detour:CONFIG] sdk/config fetch exception; using the last config.", e)
             FetchResult.Failed
+        }
+    }
+
+    suspend fun sendConsent(consent: DetourConsent, consentText: String?, deviceId: String, userId: String?) {
+        val body = buildMap<String, Any> {
+            put("device_id", deviceId)
+            userId?.let { put("user_id", it) }
+            put("consent", consent.toWire())
+            consentText?.let { put("consent_text", it) }
+        }
+        val status = post(DetourEndpoint.SDK_CONSENT, body) ?: return
+        if (status !in 200..299) Log.w(TAG, "[Detour:CONSENT] sdk/consent send failed: $status")
+    }
+
+    /** The response status, or null when no response arrived. */
+    private suspend fun post(
+        endpoint: DetourEndpoint,
+        body: Map<String, Any>,
+        client: OkHttpClient = HttpClient.okHttp,
+    ): Int? = withContext(Dispatchers.IO) {
+        val url = DetourEndpoints.url(endpoint, config) ?: return@withContext null
+        val request = Request.Builder()
+            .url(url)
+            .post(HttpClient.gson.toJson(body).toRequestBody(HttpClient.JSON))
+            .detourHeaders(config)
+            .build()
+        try {
+            client.newCall(request).execute().use { it.code }
+        } catch (e: Exception) {
+            Log.w(TAG, "[Detour:NETWORK_ERROR] ${endpoint.path} exception", e)
+            null
         }
     }
 

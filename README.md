@@ -146,6 +146,22 @@ Detour.start()
 
 `Detour.initialize(context, config)` still works and is deprecated; it is the same as `Detour.configure(context, config)`.
 
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.ANALYTICS` and others), and a purpose missing from the map is not granted. Each call replaces the previous consent, so pass every purpose in one call. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start()` only after it.
+
+```kotlin
+Detour.setConsent(
+    DetourConsent(
+        purposes = mapOf(
+            DetourPurpose.ANALYTICS to true,
+            DetourPurpose.AD_NETWORK_SHARING to false,
+        ),
+        consentTextRef = "cmp-v12",
+        source = "cmp",
+    ),
+    consentText = noticeText,
+)
+```
+
 ### Controlling which links Detour processes
 
 Use `linkProcessingMode` to control which link sources the SDK handles:
@@ -377,6 +393,9 @@ object Detour {
 
     /** Start analytics, sessions and deferred link matching after configure(autoStart = false). */
     fun start()
+
+    /** Pass the user's choice per purpose; each call replaces the previous one. */
+    fun setConsent(consent: DetourConsent, consentText: String? = null)
 
     /** Deprecated: same as configure(context, config). */
     fun initialize(context: Context, config: DetourConfig)

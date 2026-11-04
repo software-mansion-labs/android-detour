@@ -84,6 +84,9 @@ internal class SdkConfigStore(private val storage: DetourStorage, private val ap
     @Volatile
     private var config = SdkConfig.FALLBACK
 
+    /** The config as loaded so far: the fallback until the cache is read. */
+    val latest: SdkConfig get() = config
+
     /** Waits for the cached config on first use, so no request is decided by the fallback by mistake. */
     suspend fun current(): SdkConfig {
         load()

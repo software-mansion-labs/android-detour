@@ -188,7 +188,7 @@ internal class DetourApiClient(
         internal fun matchLinkJson(request: MatchRequest, context: RequestContext): String {
             val body = HttpClient.gson.toJsonTree(request).asJsonObject
             for ((field, value) in context.forMatchLink().toMap()) {
-                if (!body.has(field)) body.addProperty(field, value)
+                if (!body.has(field)) body.add(field, HttpClient.gson.toJsonTree(value))
             }
             return HttpClient.gson.toJson(body)
         }

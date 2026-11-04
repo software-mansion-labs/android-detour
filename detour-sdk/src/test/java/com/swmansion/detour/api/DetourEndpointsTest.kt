@@ -6,6 +6,8 @@ import com.swmansion.detour.analytics.AnalyticsRequest
 import com.swmansion.detour.analytics.DetourConversion
 import com.swmansion.detour.analytics.RevenueType
 import com.swmansion.detour.analytics.SessionManager
+import com.swmansion.detour.consent.DetourConsent
+import com.swmansion.detour.consent.DetourPurpose
 import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
@@ -42,6 +44,7 @@ class DetourEndpointsTest {
             DetourEndpoint.ANALYTICS_SESSION to "https://godetour.dev/api/analytics/session",
             DetourEndpoint.ANALYTICS_CONVERSION to "https://godetour.dev/api/analytics/conversion",
             DetourEndpoint.SDK_CONFIG to "https://godetour.dev/api/sdk/config",
+            DetourEndpoint.SDK_CONSENT to "https://godetour.dev/api/sdk/consent",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -137,9 +140,10 @@ class ApiClientsBaseUrlTest {
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
         SdkApiClient(config).fetchConfig(etag = null)
+        SdkApiClient(config).sendConsent(DetourConsent(mapOf(DetourPurpose.ANALYTICS to true)), null, "device", null)
         listOf(
-            AnalyticsRequest.Event("test", null),
-            AnalyticsRequest.Retention("app_open"),
+            AnalyticsRequest.Event("test", null, 0),
+            AnalyticsRequest.Retention("app_open", 0),
             AnalyticsRequest.Session(SessionManager.Event.Start("8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", 0)),
             AnalyticsRequest.Conversion(DetourConversion("purchase", BigDecimal("4.99"), "USD", RevenueType.IAP), 0),
         ).forEach { analyticsClient.send(it, "device", null) }
