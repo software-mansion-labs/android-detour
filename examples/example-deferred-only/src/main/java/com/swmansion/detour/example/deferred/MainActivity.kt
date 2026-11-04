@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Detour.initialize(
+        Detour.configure(
             this,
             DetourConfig(
                 apiKey = BuildConfig.DETOUR_API_KEY,

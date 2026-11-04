@@ -21,6 +21,7 @@ import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.InstallStore
 import com.swmansion.detour.utils.UrlHelpers
+import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -28,12 +29,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Usage:
  * ```
- * // Initialize in Application.onCreate() or Activity.onCreate()
+ * // Configure in Application.onCreate() or Activity.onCreate()
  * val config = DetourConfig(
  *     appId = "your-app-id",
  *     apiKey = "your-api-key"
  * )
- * Detour.initialize(context, config)
+ * Detour.configure(context, config)
  *
  * // Process any link (Verified, Scheme, or Deferred) in onCreate()
  * lifecycleScope.launch {
@@ -58,6 +59,8 @@ object Detour {
 
     private val sessionHandled = AtomicBoolean(false)
 
+    private val started = CompletableDeferred<Unit>()
+
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
     private lateinit var storage: DetourStorage
@@ -68,24 +71,61 @@ object Detour {
     private lateinit var userIdStore: UserIdStore
 
     /**
-     * Initialize Detour SDK.
-     * Call this once in Application.onCreate() or before using processLink() or getDeferredLink().
+     * Sets up the SDK without sending user data. Call it once in Application.onCreate().
+     *
+     * With `autoStart = false` nothing that collects data runs until [start], so the app can wait
+     * for its consent platform first. Routing of links the user taps works either way.
+     *
+     * @param context Application or Activity context
+     * @param config Detour configuration
+     * @param autoStart Calls [start] right away (default)
+     */
+    @JvmStatic
+    @JvmOverloads
+    @Synchronized
+    fun configure(context: Context, config: DetourConfig, autoStart: Boolean = true) {
+        if (isInitialized) {
+            Log.w(TAG, "[Detour:CONFIG] configure called again; the first config is kept.")
+        } else if (!setUp(context, config)) {
+            return
+        }
+
+        if (autoStart) start()
+    }
+
+    /**
+     * Starts analytics, sessions and deferred link matching. Call it after [configure].
+     * Until then [getDeferredLink] waits.
+     */
+    @JvmStatic
+    @Synchronized
+    fun start() {
+        if (!isInitialized) {
+            Log.w(TAG, "[Detour:CONFIG] start called before configure; nothing started.")
+            return
+        }
+        DetourAnalytics.start()
+        started.complete(Unit)
+    }
+
+    /**
+     * Initialize Detour SDK and start it.
      *
      * @param context Application or Activity context
      * @param config Detour configuration
      */
+    @Deprecated(
+        "Use configure, which also starts the SDK unless autoStart is false.",
+        ReplaceWith("Detour.configure(context, config)")
+    )
     @JvmStatic
-    @Synchronized
-    fun initialize(context: Context, config: DetourConfig) {
-        if (isInitialized) {
-            Log.w(TAG, "SDK already initialized")
-            return
-        }
+    fun initialize(context: Context, config: DetourConfig) = configure(context, config)
 
+    private fun setUp(context: Context, config: DetourConfig): Boolean {
         if (config.apiKey.isBlank() || config.appId.isBlank()) {
             Log.e(TAG, "[Detour] apiKey or appId is missing — SDK will not process links. " +
                        "Set your credentials in DetourConfig.")
-            return
+            return false
         }
 
         this.applicationContext = context.applicationContext
@@ -101,24 +141,23 @@ object Detour {
         this.installStore = InstallStore(context.applicationContext.noBackupFilesDir, storage)
         this.userIdStore = UserIdStore(storage)
 
-        // Initialize analytics subsystem
         DetourAnalytics.initialize(config, requestContext, installStore, userIdStore)
-        DetourAnalytics.logAppOpenIfNeeded()
 
         this.isInitialized = true
-        Log.d(TAG, "SDK initialized")
+        Log.d(TAG, "SDK configured")
+        return true
     }
 
     /**
      * Set the app's own user identifier, sent with every later request. `null` removes it.
      * Must not be an e-mail address or a phone number.
      *
-     * Call after [initialize]; [DetourConfig.userIdValidator] runs on every value.
+     * Call after [configure]; [DetourConfig.userIdValidator] runs on every value.
      */
     @JvmStatic
     fun setUserId(userId: String?) {
         if (!isInitialized) {
-            Log.w(TAG, "SDK not initialized. Call Detour.initialize() first.")
+            Log.w(TAG, "SDK not initialized. Call Detour.configure() first.")
             return
         }
 
@@ -156,7 +195,7 @@ object Detour {
     suspend fun processLink(intent: Intent): LinkResult {
         if (!isInitialized) {
             return LinkResult.Error(
-                IllegalStateException("Detour SDK not initialized. Call Detour.initialize() first.")
+                IllegalStateException("Detour SDK not initialized. Call Detour.configure() first.")
             )
         }
 
@@ -200,7 +239,7 @@ object Detour {
     suspend fun getDeferredLink(): LinkResult {
         if (!isInitialized) {
             return LinkResult.Error(
-                IllegalStateException("Detour SDK not initialized. Call Detour.initialize() first.")
+                IllegalStateException("Detour SDK not initialized. Call Detour.configure() first.")
             )
         }
 
@@ -221,7 +260,7 @@ object Detour {
     @JvmStatic
     suspend fun resolveShortLink(url: String): ShortLinkResponse? {
         if (!isInitialized) {
-            Log.w(TAG, "SDK not initialized. Call Detour.initialize() first.")
+            Log.w(TAG, "SDK not initialized. Call Detour.configure() first.")
             return null
         }
 
@@ -305,7 +344,9 @@ object Detour {
             return LinkResult.NotFirstLaunch
         }
 
-        // Mark as launched
+        // The first-launch flag is stored only when matching runs, so an app closed before
+        // start() still matches on its next launch.
+        started.await()
         installStore.markFirstLaunchHandled()
         Log.d(TAG, "First launch detected, processing deferred link")
 

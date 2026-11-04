@@ -31,6 +31,9 @@ object DetourAnalytics {
     @Volatile
     private var isInitialized = false
 
+    @Volatile
+    private var isStarted = false
+
     private lateinit var apiClient: AnalyticsApiClient
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
@@ -41,7 +44,7 @@ object DetourAnalytics {
     internal val sessionManager = SessionManager()
 
     /**
-     * Internal — called from [com.swmansion.detour.Detour.initialize].
+     * Internal — called from [com.swmansion.detour.Detour.configure].
      */
     internal fun initialize(
         config: DetourConfig,
@@ -53,7 +56,17 @@ object DetourAnalytics {
         this.installStore = installStore
         this.userIdStore = userIdStore
         isInitialized = true
+    }
+
+    /**
+     * Internal — called from [com.swmansion.detour.Detour.start].
+     */
+    @Synchronized
+    internal fun start() {
+        if (isStarted) return
+        isStarted = true
         startSessions()
+        logAppOpenIfNeeded()
     }
 
     /**
@@ -94,8 +107,8 @@ object DetourAnalytics {
     }
 
     private fun send(request: AnalyticsRequest) {
-        if (!isInitialized) {
-            Log.w(TAG, "[Detour:ANALYTICS] Analytics not initialized — call Detour.initialize() first")
+        if (!isStarted) {
+            Log.w(TAG, "[Detour:ANALYTICS] Analytics not started — call Detour.start() (or Detour.configure()) first")
             return
         }
 
@@ -124,7 +137,7 @@ object DetourAnalytics {
      * Internal — fires an `app_open` retention event once per session.
      * Mirrors the RN SDK's `useAppOpenRetention`.
      */
-    internal fun logAppOpenIfNeeded() {
+    private fun logAppOpenIfNeeded() {
         if (appOpenFired) return
         appOpenFired = true
         logRetention("app_open")

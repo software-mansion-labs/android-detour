@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
  *         super.onCreate(savedInstanceState)
  *         setContentView(R.layout.activity_main)
  *
- *         Detour.initialize(this, detourDelegate.config)
+ *         Detour.configure(this, detourDelegate.config)
  *         detourDelegate.onCreate(intent)
  *     }
  *
