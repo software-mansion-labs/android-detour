@@ -1,5 +1,6 @@
 package com.swmansion.detour.api
 
+import com.swmansion.detour.api.DetourApiClient.UniversalLinkClickOutcome
 import com.swmansion.detour.api.DetourApiClient.UniversalLinkClickResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -10,15 +11,18 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class UniversalLinkClickRecorderTest {
 
     private var now = 1_000_000L
     private val sentUrls = mutableListOf<String>()
-    private var response: UniversalLinkClickResult? = ALLOWED
+    private var response: UniversalLinkClickOutcome = SAVED
 
     private fun TestScope.recorder(
-        sendClick: suspend (String) -> UniversalLinkClickResult? = { url ->
+        sendClick: suspend (String) -> UniversalLinkClickOutcome = { url ->
             sentUrls += url
             response
         }
@@ -39,7 +43,7 @@ class UniversalLinkClickRecorderTest {
 
     @Test
     fun `shares a request that is still in flight`() = runTest {
-        val pendingResponse = CompletableDeferred<UniversalLinkClickResult?>()
+        val pendingResponse = CompletableDeferred<UniversalLinkClickOutcome>()
         val recorder = recorder { url ->
             sentUrls += url
             pendingResponse.await()
@@ -47,7 +51,7 @@ class UniversalLinkClickRecorderTest {
 
         val calls = listOf(async { recorder.record(LINK) }, async { recorder.record(LINK) })
         runCurrent()
-        pendingResponse.complete(ALLOWED)
+        pendingResponse.complete(SAVED)
 
         assertEquals(listOf(ALLOWED, ALLOWED), calls.awaitAll())
         assertEquals(1, sentUrls.size)
@@ -55,7 +59,7 @@ class UniversalLinkClickRecorderTest {
 
     @Test
     fun `keeps the request going when the caller is cancelled`() = runTest {
-        val pendingResponse = CompletableDeferred<UniversalLinkClickResult?>()
+        val pendingResponse = CompletableDeferred<UniversalLinkClickOutcome>()
         val recorder = recorder { url ->
             sentUrls += url
             pendingResponse.await()
@@ -65,7 +69,7 @@ class UniversalLinkClickRecorderTest {
         val destroyedCaller = launch { recorder.record(LINK) }
         runCurrent()
         destroyedCaller.cancel()
-        pendingResponse.complete(ALLOWED)
+        pendingResponse.complete(SAVED)
 
         assertEquals(ALLOWED, recorder.record(LINK))
         assertEquals(1, sentUrls.size)
@@ -95,7 +99,7 @@ class UniversalLinkClickRecorderTest {
     @Test
     fun `reuses a denied result for the repeat`() = runTest {
         val denied = UniversalLinkClickResult(allowed = false, error = "Click limit exceeded", effectiveLimit = 100)
-        response = denied
+        response = UniversalLinkClickOutcome.Saved(denied)
         val recorder = recorder()
 
         recorder.record(LINK)
@@ -107,11 +111,11 @@ class UniversalLinkClickRecorderTest {
 
     @Test
     fun `lets the link open and sends the click again when it was not saved`() = runTest {
-        response = null
+        response = UniversalLinkClickOutcome.NotSaved
         val recorder = recorder()
 
         val failed = recorder.record(LINK)
-        response = ALLOWED
+        response = SAVED
         val retried = recorder.record(LINK)
 
         assertEquals(UniversalLinkClickResult(allowed = true), failed)
@@ -125,7 +129,7 @@ class UniversalLinkClickRecorderTest {
         val recorder = recorder { url ->
             sentUrls += url
             if (++attempts == 1) throw IllegalStateException("offline")
-            ALLOWED
+            SAVED
         }
 
         val failed = recorder.record(LINK)
@@ -139,5 +143,6 @@ class UniversalLinkClickRecorderTest {
     private companion object {
         const val LINK = "https://myapp.godetour.link/abc123/product/42?ref=x"
         val ALLOWED = UniversalLinkClickResult(allowed = true, clickId = "click-1")
+        val SAVED = UniversalLinkClickOutcome.Saved(ALLOWED)
     }
 }
