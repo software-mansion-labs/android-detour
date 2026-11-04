@@ -162,6 +162,12 @@ Detour.setConsent(
 )
 ```
 
+To turn the SDK off for a user, call `setEnabled(false)`. It stays off across launches until `setEnabled(true)`. While off, the SDK sends nothing (analytics, sessions, conversions, consent, matching by device signals); links the user taps are still routed, and a click ID from the Play install referrer still matches the deferred link without the device ID. Withdrawing consent for a purpose stops only that purpose.
+
+```kotlin
+Detour.setEnabled(false)
+```
+
 ### Controlling which links Detour processes
 
 Use `linkProcessingMode` to control which link sources the SDK handles:
@@ -396,6 +402,9 @@ object Detour {
 
     /** Pass the user's choice per purpose; each call replaces the previous one. */
     fun setConsent(consent: DetourConsent, consentText: String? = null)
+
+    /** Turn the SDK off (or back on) for this install; kept across launches. */
+    fun setEnabled(enabled: Boolean)
 
     /** Deprecated: same as configure(context, config). */
     fun initialize(context: Context, config: DetourConfig)

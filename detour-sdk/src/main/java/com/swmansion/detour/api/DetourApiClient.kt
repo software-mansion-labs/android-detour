@@ -27,11 +27,12 @@ internal class DetourApiClient(
      * Match link using a direct or signal-based match request.
      *
      * @param request Match request (direct or signal-based)
+     * @param withContext `false` sends the request's own fields only, the v1 body
      * @return Matched link or null
      */
-    suspend fun matchLink(request: MatchRequest): String? = withContext(Dispatchers.IO) {
+    suspend fun matchLink(request: MatchRequest, withContext: Boolean = true): String? = withContext(Dispatchers.IO) {
         val url = DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config) ?: return@withContext null
-        val json = matchLinkJson(request, requestContext.current())
+        val json = if (withContext) matchLinkJson(request, requestContext.current()) else HttpClient.gson.toJson(request)
         Log.d(TAG, "Sending match request to API")
 
         val request = Request.Builder()

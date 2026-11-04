@@ -45,6 +45,7 @@ class DetourEndpointsTest {
             DetourEndpoint.ANALYTICS_CONVERSION to "https://godetour.dev/api/analytics/conversion",
             DetourEndpoint.SDK_CONFIG to "https://godetour.dev/api/sdk/config",
             DetourEndpoint.SDK_CONSENT to "https://godetour.dev/api/sdk/consent",
+            DetourEndpoint.SDK_DISABLE to "https://godetour.dev/api/sdk/disable",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -141,6 +142,7 @@ class ApiClientsBaseUrlTest {
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
         SdkApiClient(config).fetchConfig(etag = null)
         SdkApiClient(config).sendConsent(DetourConsent(mapOf(DetourPurpose.ANALYTICS to true)), null, "device", null)
+        SdkApiClient(config).sendKillSwitch(enabled = false, atMs = 0, deviceId = "device")
         listOf(
             AnalyticsRequest.Event("test", null, 0),
             AnalyticsRequest.Retention("app_open", 0),

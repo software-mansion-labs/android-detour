@@ -15,6 +15,7 @@ internal enum class DetourEndpoint(val path: String) {
     ANALYTICS_CONVERSION("api/analytics/conversion"),
     SDK_CONFIG("api/sdk/config"),
     SDK_CONSENT("api/sdk/consent"),
+    SDK_DISABLE("api/sdk/disable"),
 }
 
 internal object DetourEndpoints {

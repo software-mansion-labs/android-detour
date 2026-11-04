@@ -44,6 +44,7 @@ object DetourAnalytics {
     private lateinit var userIdStore: UserIdStore
     private lateinit var consentStore: ConsentStore
     private lateinit var sdkConfigStore: SdkConfigStore
+    private lateinit var isEnabled: suspend () -> Boolean
 
     private val waitingForConsent = mutableListOf<AnalyticsRequest>()
 
@@ -66,12 +67,14 @@ object DetourAnalytics {
         userIdStore: UserIdStore,
         consentStore: ConsentStore,
         sdkConfigStore: SdkConfigStore,
+        isEnabled: suspend () -> Boolean,
     ) {
         apiClient = AnalyticsApiClient(config, requestContext)
         this.installStore = installStore
         this.userIdStore = userIdStore
         this.consentStore = consentStore
         this.sdkConfigStore = sdkConfigStore
+        this.isEnabled = isEnabled
         isInitialized = true
     }
 
@@ -143,11 +146,12 @@ object DetourAnalytics {
     private suspend fun deliver(request: AnalyticsRequest) {
         val gateDefault = sdkConfigStore.current().gateDefault(DetourPurpose.ANALYTICS)
         val storedConsent = consentStore.stored()
+        val enabled = isEnabled()
         // Decided under the lock, so a consent passed meanwhile either decides this request
         // or finds it in the waiting list.
         val decision = synchronized(waitingForConsent) {
             val decision = ConsentGate.decide(
-                DetourPurpose.ANALYTICS, consentStore.passedThisLaunch, storedConsent, gateDefault
+                DetourPurpose.ANALYTICS, enabled, consentStore.passedThisLaunch, storedConsent, gateDefault
             )
             if (decision == GateDecision.WAIT && waitingForConsent.size < MAX_WAITING_FOR_CONSENT) {
                 waitingForConsent.add(request)

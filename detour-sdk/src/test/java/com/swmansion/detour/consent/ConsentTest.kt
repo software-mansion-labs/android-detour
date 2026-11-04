@@ -23,7 +23,8 @@ class ConsentGateTest {
         passedThisLaunch: DetourConsent? = null,
         stored: DetourConsent? = null,
         gate: ConsentGateDefault,
-    ) = ConsentGate.decide(DetourPurpose.ANALYTICS, passedThisLaunch, stored, gate)
+        isEnabled: Boolean = true,
+    ) = ConsentGate.decide(DetourPurpose.ANALYTICS, isEnabled, passedThisLaunch, stored, gate)
 
     @Test
     fun `without consent the server default decides`() {
@@ -48,6 +49,11 @@ class ConsentGateTest {
     fun `stored grant does not pass a closed gate on its own`() {
         assertEquals(GateDecision.WAIT, decide(stored = granted, gate = ConsentGateDefault.CLOSED))
         assertEquals(GateDecision.SEND, decide(stored = granted, gate = ConsentGateDefault.OPEN))
+    }
+
+    @Test
+    fun `kill switch stops even granted purposes`() {
+        assertEquals(GateDecision.DROP, decide(passedThisLaunch = granted, gate = ConsentGateDefault.OPEN, isEnabled = false))
     }
 
     @Test

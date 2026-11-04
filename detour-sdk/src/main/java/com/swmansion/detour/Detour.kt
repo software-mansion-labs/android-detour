@@ -11,6 +11,7 @@ import com.swmansion.detour.api.DetourEndpoints
 import com.swmansion.detour.api.SdkApiClient
 import com.swmansion.detour.consent.ConsentStore
 import com.swmansion.detour.consent.DetourConsent
+import com.swmansion.detour.consent.KillSwitchReporter
 import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identity.UserIdPolicy
 import com.swmansion.detour.identity.UserIdStore
@@ -30,6 +31,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -83,8 +86,17 @@ object Detour {
     private lateinit var sdkConfigStore: SdkConfigStore
     private lateinit var consentStore: ConsentStore
 
+    private lateinit var killSwitchReporter: KillSwitchReporter
+
     /** A consent passed before [configure]; recorded and sent once the SDK is set up. */
     private var consentBeforeConfigure: Pair<DetourConsent, String?>? = null
+
+    private data class KillSwitchChange(val enabled: Boolean, val atMs: Long)
+
+    // setEnabled applies at once; the file is written in the background, the latest call last.
+    @Volatile
+    private var enabledThisLaunch: KillSwitchChange? = null
+    private val enabledWrite = Mutex()
 
     /**
      * Sets up the SDK without sending user data. Call it once in Application.onCreate().
@@ -140,6 +152,7 @@ object Detour {
     // Once per launch, so a value changed on the server reaches the app on its next launch.
     private fun refreshSdkConfig() {
         scope.launch {
+            if (!isEnabled()) return@launch
             if (sdkConfigStore.apply(sdkApiClient.fetchConfig(sdkConfigStore.etag()))) {
                 DetourAnalytics.reevaluateWaiting()
             }
@@ -172,7 +185,35 @@ object Detour {
         consentStore.record(withSchema)
         DetourAnalytics.reevaluateWaiting()
         scope.launch {
+            if (!isEnabled()) return@launch
             sdkApiClient.sendConsent(withSchema, consentText, installStore.getDeviceId(), userIdStore.current())
+        }
+    }
+
+    /**
+     * `false` turns the SDK off for this install, also on later launches, until `setEnabled(true)`.
+     * While off it sends nothing: no analytics, sessions, conversions, consent or matching by device
+     * signals. Links the user taps are still routed, and a click ID from the Play install referrer
+     * still matches the deferred link, without the device ID. The device ID does not change.
+     */
+    @JvmStatic
+    @Synchronized
+    fun setEnabled(enabled: Boolean) {
+        enabledThisLaunch = KillSwitchChange(enabled, System.currentTimeMillis())
+        if (isInitialized) applyKillSwitch()
+    }
+
+    private suspend fun isEnabled(): Boolean = enabledThisLaunch?.enabled ?: installStore.isEnabled()
+
+    // Also resumes a state an earlier launch could not report.
+    private fun applyKillSwitch() {
+        scope.launch {
+            enabledWrite.withLock {
+                enabledThisLaunch?.let { installStore.setEnabled(it.enabled, it.atMs) }
+            }
+            // Drops what waited for consent when the SDK goes off.
+            DetourAnalytics.reevaluateWaiting()
+            killSwitchReporter.sync()
         }
     }
 
@@ -200,11 +241,15 @@ object Detour {
         this.userIdStore = UserIdStore(storage)
         this.sdkApiClient = SdkApiClient(config)
         this.sdkConfigStore = SdkConfigStore(storage, config.appId)
+        this.killSwitchReporter = KillSwitchReporter(installStore, scope) { enabled, atMs ->
+            sdkApiClient.sendKillSwitch(enabled, atMs, installStore.getDeviceId())
+        }
         refreshSdkConfig()
 
-        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore, consentStore, sdkConfigStore)
+        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore, consentStore, sdkConfigStore, ::isEnabled)
 
         this.isInitialized = true
+        applyKillSwitch()
         consentBeforeConfigure?.let { (consent, text) -> recordConsent(consent, text) }
         consentBeforeConfigure = null
         Log.d(TAG, "SDK configured")
@@ -338,7 +383,12 @@ object Detour {
         Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
-        val clickResult = apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
+        // The click is Detour's measurement, not routing, so the kill switch stops it.
+        val clickResult = if (isEnabled()) {
+            apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
+        } else {
+            DetourApiClient.UniversalLinkClickResult(allowed = true)
+        }
         if (!clickResult.allowed) {
             Log.e(TAG, "[Detour:CLICK_LIMIT_ERROR] Universal/App link blocked: url=$link error=${clickResult.error} code=${clickResult.code} clicksInPeriod=${clickResult.clicksInPeriod} effectiveLimit=${clickResult.effectiveLimit}")
             return LinkResult.NoLink
@@ -420,7 +470,12 @@ object Detour {
         val deviceId = installStore.getDeviceId()
         val userId = userIdStore.current()
 
-        val link: String? = if (clickId != null) {
+        val link: String? = if (!isEnabled()) {
+            // Routing by the click ID still works with the SDK off, with the v1 body only.
+            if (clickId == null) return LinkResult.NoLink
+            Log.d(TAG, "SDK disabled; direct matching with click_id and no device data")
+            apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
+        } else if (clickId != null) {
             Log.d(TAG, "Using direct matching with click_id")
             apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer))
         } else {

@@ -3,6 +3,8 @@ package com.swmansion.detour.api
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.consent.DetourConsent
+import com.swmansion.detour.consent.KillSwitchReporter.Outcome
+import com.swmansion.detour.utils.IsoTimestamp
 import com.swmansion.detour.consent.SdkConfigStore.FetchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +12,7 @@ import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /** Requests to the `api/sdk/` endpoints. */
 internal class SdkApiClient(private val config: DetourConfig) {
@@ -53,6 +56,31 @@ internal class SdkApiClient(private val config: DetourConfig) {
         }
         val status = post(DetourEndpoint.SDK_CONSENT, body) ?: return
         if (status !in 200..299) Log.w(TAG, "[Detour:CONSENT] sdk/consent send failed: $status")
+    }
+
+    suspend fun sendKillSwitch(enabled: Boolean, atMs: Long, deviceId: String): Outcome {
+        if (DetourEndpoints.url(DetourEndpoint.SDK_DISABLE, config) == null) return Outcome.STOP
+        val body = mapOf(
+            "device_id" to deviceId,
+            "disabled" to !enabled,
+            "timestamp" to IsoTimestamp.format(atMs),
+        )
+        // The server stops writing about 28 s after a request starts, so a request given up
+        // after 60 s can no longer land after the next one. The shared client gives up at 15 s.
+        val client = HttpClient.okHttp.newBuilder()
+            .callTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+        val status = post(DetourEndpoint.SDK_DISABLE, body, client) ?: return Outcome.RETRY
+
+        return when {
+            status in 200..299 -> Outcome.CONFIRMED
+            status == 429 || status >= 500 -> Outcome.RETRY
+            else -> {
+                Log.e(TAG, "[Detour:KILL_SWITCH] sdk/disable rejected: $status; sent again on the next launch.")
+                Outcome.STOP
+            }
+        }
     }
 
     /** The response status, or null when no response arrived. */
