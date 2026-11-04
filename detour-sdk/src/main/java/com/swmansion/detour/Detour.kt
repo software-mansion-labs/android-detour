@@ -55,7 +55,6 @@ object Detour {
     private var isInitialized = false
 
     private val sessionHandled = AtomicBoolean(false)
-    private val linkOpens = LinkOpens()
 
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
@@ -118,8 +117,9 @@ object Detour {
      * In [LinkProcessingMode.DEFERRED_ONLY] mode, steps 1-2 are skipped entirely.
      *
      * A link from an intent opens once. Processing the same intent again, for example after the
-     * activity was recreated, returns [LinkResult.NoLink]. So does the same link in another intent
-     * within 1 s of an open, for example when a splash activity passes it on.
+     * activity was recreated, returns [LinkResult.NoLink]. The screen the link opened is already
+     * there then, so do not navigate away on it. A copy of the intent, or another intent with the
+     * same link, opens again, but its click is not sent again within 10 s.
      *
      * @param intent Activity intent to process
      * @return LinkResult with link data or status
@@ -140,7 +140,7 @@ object Detour {
                     val uriString = uri.toString()
 
                     if (UrlHelpers.isWebUrl(uriString)) {
-                        return linkOpens.openOnce(intent) {
+                        return LinkOpens.openOnce(intent) {
                             // Mark first entrance so subsequent launches don't try deferred matching
                             firstLaunchDetector.markAsLaunched()
                             processUniversalLink(uri)
@@ -148,7 +148,7 @@ object Detour {
                     }
 
                     if (config.linkProcessingMode == LinkProcessingMode.ALL) {
-                        return linkOpens.openOnce(intent) { processSchemeLink(uri) }
+                        return LinkOpens.openOnce(intent) { processSchemeLink(uri) }
                     }
                 }
             }

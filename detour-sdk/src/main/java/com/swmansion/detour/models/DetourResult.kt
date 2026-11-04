@@ -31,7 +31,8 @@ sealed class LinkResult {
 
     /**
      * No link found - normal app launch without any deep link, or the link from this intent
-     * was already opened (for example, the activity was recreated).
+     * was already opened (for example, the activity was recreated). Do not navigate away on it:
+     * after a recreation the screen the link opened is already there.
      */
     data object NoLink : LinkResult()
 

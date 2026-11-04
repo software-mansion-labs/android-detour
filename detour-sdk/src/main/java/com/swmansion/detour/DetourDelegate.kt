@@ -16,9 +16,10 @@ import kotlinx.coroutines.launch
  * Compatible with any [LifecycleOwner] — `ComponentActivity`, `AppCompatActivity`,
  * or `Fragment`.
  *
- * A link opens once: when the owner is recreated (rotation, process death), the link from the
- * restored intent is not delivered again. This needs an owner with saved state, such as an
- * activity or a fragment.
+ * A link opens once: when the owner is recreated (rotation, process death), [onLinkResult] gets
+ * [LinkResult.NoLink] for the restored intent. The screen the link opened is restored too, so do
+ * not navigate away on NoLink. This needs an owner with saved state, such as an activity or a
+ * fragment.
  *
  * Usage:
  * ```
@@ -62,7 +63,8 @@ class DetourDelegate(
 ) {
 
     /**
-     * Call from Activity.onCreate() to handle Universal, Scheme, and Deferred links.
+     * Call from Activity.onCreate(), after super.onCreate(), to handle Universal, Scheme,
+     * and Deferred links.
      *
      * @param intent The activity intent
      */
@@ -97,7 +99,7 @@ class DetourDelegate(
         if (!registry.isRestored) return
 
         if (registry.consumeRestoredStateForKey(SAVED_STATE_KEY) != null) {
-            LinkOpens.markOpenedBeforeProcessDeath(intent)
+            LinkOpens.markOpenedInPreviousProcess(intent)
         }
         if (registry.getSavedStateProvider(SAVED_STATE_KEY) == null) {
             registry.registerSavedStateProvider(SAVED_STATE_KEY) { Bundle() }

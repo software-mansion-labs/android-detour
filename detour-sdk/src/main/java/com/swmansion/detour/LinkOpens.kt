@@ -1,33 +1,34 @@
 package com.swmansion.detour
 
 import android.content.Intent
-import android.os.SystemClock
 import android.util.Log
 import com.swmansion.detour.models.LinkResult
+import java.util.WeakHashMap
 
 /**
- * Makes sure one tap on a link opens it in the app once.
+ * Makes sure the link from one intent opens in the app once.
  *
- * The same intent can be processed again: a recreated activity gets the same Intent object back,
- * an app can call [Detour.processLink] twice or use two [DetourDelegate]s, and a forwarded copy
- * of the intent keeps its extras. So the open state is stored in the intent extras.
- *
- * An app can also pass the link on in a new intent, for example from a splash activity.
- * So the same link from another intent within [sameTapWindowMs] of an open does not open again.
+ * The same Intent object can be processed again: a recreated activity gets it back, and an app can
+ * call [Detour.processLink] twice or use two [DetourDelegate]s. A copy of the intent, or a new intent
+ * with the same link, opens again. The SDK cannot tell a repeat from an activity that passes the
+ * link on, and losing a link is worse than opening it twice. Its click is still sent once.
  */
-internal class LinkOpens(
-    private val now: () -> Long = SystemClock::elapsedRealtime,
-    private val sameTapWindowMs: Long = SAME_TAP_WINDOW_MS
-) {
+internal object LinkOpens {
 
-    private val openedAt = mutableMapOf<String, Long>()
+    private const val TAG = "Detour"
+
+    private enum class OpenState { PENDING, OPENED }
+
+    // Intent does not override equals, so the state belongs to one Intent object. Weak keys let it
+    // go away with the activity that holds the intent.
+    private val openStates = WeakHashMap<Intent, OpenState>()
 
     /**
      * Runs [open] for a link the app has not got yet. Returns [LinkResult.NoLink] for a link
-     * that was already opened, and for the slower of two calls that open the same link at once.
+     * that was already opened, and for the slower of two calls that process the same intent at once.
      *
      * The intent is marked as pending before [open] suspends. This is how
-     * [markOpenedBeforeProcessDeath] tells a recreated activity from one restored in a new process.
+     * [markOpenedInPreviousProcess] tells a recreated activity from one restored in a new process.
      */
     suspend fun openOnce(intent: Intent, open: suspend () -> LinkResult): LinkResult {
         if (isOpened(intent)) {
@@ -35,67 +36,36 @@ internal class LinkOpens(
             return LinkResult.NoLink
         }
 
-        setStateIfMissing(intent, STATE_PENDING)
+        setStateIfMissing(intent, OpenState.PENDING)
         val result = open()
         return if (claimOpen(intent)) result else LinkResult.NoLink
     }
 
-    private fun claimOpen(intent: Intent): Boolean {
-        synchronized(lock) {
-            if (readState(intent) == STATE_OPENED) return false
-            writeState(intent, STATE_OPENED)
-
-            val link = intent.dataString ?: return true
-            val claimedAt = now()
-            openedAt.values.removeAll { claimedAt - it >= sameTapWindowMs }
-            if (link in openedAt) {
-                Log.d(TAG, "Link was opened from another intent a moment ago")
-                return false
-            }
-            openedAt[link] = claimedAt
-            return true
-        }
+    /**
+     * After process death the system restores the activity with a new Intent object, so this
+     * process has no state for it. Its link was opened in the previous process and must not open
+     * again. An intent that this process already saw keeps its state.
+     */
+    fun markOpenedInPreviousProcess(intent: Intent) {
+        if (intent.data != null) setStateIfMissing(intent, OpenState.OPENED)
     }
 
-    companion object {
-        private const val TAG = "Detour"
-        private const val EXTRA_OPEN_STATE = "com.swmansion.detour.extra.LINK_OPEN_STATE"
-        private const val STATE_PENDING = "pending"
-        private const val STATE_OPENED = "opened"
+    @Synchronized
+    fun isOpened(intent: Intent): Boolean {
+        // From Recents the system replays the intent that started the task. Its link was opened then.
+        val launchedFromHistory = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        return launchedFromHistory || openStates[intent] == OpenState.OPENED
+    }
 
-        // A link passed on in a new intent reaches the SDK again within milliseconds.
-        // The React Native and iOS SDKs also treat a repeat within 1 s as the same tap.
-        const val SAME_TAP_WINDOW_MS = 1_000L
+    @Synchronized
+    private fun claimOpen(intent: Intent): Boolean {
+        if (openStates[intent] == OpenState.OPENED) return false
+        openStates[intent] = OpenState.OPENED
+        return true
+    }
 
-        private val lock = Any()
-
-        /**
-         * After process death the system restores the activity with its original intent, without the
-         * extras added in the old process. That intent was opened before, so it must not open again.
-         * An intent that already has a state was seen in this process and keeps it.
-         */
-        fun markOpenedBeforeProcessDeath(intent: Intent) {
-            if (intent.data != null) setStateIfMissing(intent, STATE_OPENED)
-        }
-
-        fun isOpened(intent: Intent): Boolean {
-            // The system reopened the task from Recents with the intent that started it.
-            val launchedFromHistory = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
-            return launchedFromHistory || readState(intent) == STATE_OPENED
-        }
-
-        private fun setStateIfMissing(intent: Intent, state: String) {
-            synchronized(lock) {
-                if (readState(intent) == null) writeState(intent, state)
-            }
-        }
-
-        // Extras from another app can fail to unparcel. The link then opens as before this check.
-        private fun readState(intent: Intent): String? =
-            runCatching { intent.getStringExtra(EXTRA_OPEN_STATE) }.getOrNull()
-
-        private fun writeState(intent: Intent, state: String) {
-            runCatching { intent.putExtra(EXTRA_OPEN_STATE, state) }
-        }
+    @Synchronized
+    private fun setStateIfMissing(intent: Intent, state: OpenState) {
+        if (intent !in openStates) openStates[intent] = state
     }
 }
