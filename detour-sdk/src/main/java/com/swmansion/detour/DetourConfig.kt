@@ -16,7 +16,7 @@ import com.swmansion.detour.storage.DetourStorage
  * @property userIdValidator Called on [Detour.setUserId]; returning `false` drops the value and clears
  *                   the stored one. Use it to reject values that must not leave the device, such as
  *                   e-mail addresses or phone numbers.
- * @property attribution Turns on MMP mode (see [DetourAttributionConfig]). `null` keeps the core SDK.
+ * @property attribution Turns on attribution mode (see [DetourAttributionConfig]). `null` keeps the core SDK.
  */
 data class DetourConfig(
     val apiKey: String,

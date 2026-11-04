@@ -271,14 +271,14 @@ data class DetourConfig(
     /** Check for setUserId values; returning false drops the value and clears the stored one (default: null). */
     val userIdValidator: ((String) -> Boolean)? = null,
 
-    /** Turns on MMP mode (default: null = core SDK). */
+    /** Turns on attribution mode (default: null = core SDK). */
     val attribution: DetourAttributionConfig? = null
 )
 ```
 
 `baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.initialize` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
 
-`attribution = DetourAttributionConfig()` turns on MMP mode: requests tell the Detour backend that they come from an app that uses attribution, so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan, consent and each network's settings). It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+`attribution = DetourAttributionConfig()` turns on attribution mode: requests tell the Detour backend that they come from an app that uses attribution, so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan, consent and each network's settings). It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
 
 </details>
 
