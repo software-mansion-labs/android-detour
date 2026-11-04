@@ -8,6 +8,11 @@ import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.api.DetourEndpoints
+import com.swmansion.detour.api.SdkApiClient
+import com.swmansion.detour.consent.ConsentStore
+import com.swmansion.detour.consent.DetourConsent
+import com.swmansion.detour.consent.KillSwitchReporter
+import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identity.UserIdPolicy
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.models.DirectMatchRequest
@@ -21,6 +26,13 @@ import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.InstallStore
 import com.swmansion.detour.utils.UrlHelpers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -28,12 +40,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Usage:
  * ```
- * // Initialize in Application.onCreate() or Activity.onCreate()
+ * // Configure in Application.onCreate() or Activity.onCreate()
  * val config = DetourConfig(
  *     appId = "your-app-id",
  *     apiKey = "your-api-key"
  * )
- * Detour.initialize(context, config)
+ * Detour.configure(context, config)
  *
  * // Process any link (Verified, Scheme, or Deferred) in onCreate()
  * lifecycleScope.launch {
@@ -58,6 +70,10 @@ object Detour {
 
     private val sessionHandled = AtomicBoolean(false)
 
+    private val started = CompletableDeferred<Unit>()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
     private lateinit var storage: DetourStorage
@@ -66,59 +82,190 @@ object Detour {
     private lateinit var installReferrerHelper: InstallReferrerHelper
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
+    private lateinit var sdkApiClient: SdkApiClient
+    private lateinit var sdkConfigStore: SdkConfigStore
+    private lateinit var consentStore: ConsentStore
+
+    private lateinit var killSwitchReporter: KillSwitchReporter
+
+    /** A consent passed before [configure]; recorded and sent once the SDK is set up. */
+    private var consentBeforeConfigure: Pair<DetourConsent, String?>? = null
+
+    private data class KillSwitchChange(val enabled: Boolean, val atMs: Long)
+
+    // setEnabled applies at once; the file is written in the background, the latest call last.
+    @Volatile
+    private var enabledThisLaunch: KillSwitchChange? = null
+    private val enabledWrite = Mutex()
 
     /**
-     * Initialize Detour SDK.
-     * Call this once in Application.onCreate() or before using processLink() or getDeferredLink().
+     * Sets up the SDK without sending user data. Call it once in Application.onCreate().
+     *
+     * With `autoStart = false` nothing that collects data runs until [start], so the app can wait
+     * for its consent platform first. Routing of links the user taps works either way.
+     *
+     * @param context Application or Activity context
+     * @param config Detour configuration
+     * @param autoStart Calls [start] right away (default)
+     */
+    @JvmStatic
+    @JvmOverloads
+    @Synchronized
+    fun configure(context: Context, config: DetourConfig, autoStart: Boolean = true) {
+        if (isInitialized) {
+            Log.w(TAG, "[Detour:CONFIG] configure called again; the first config is kept.")
+        } else if (!setUp(context, config)) {
+            return
+        }
+
+        if (autoStart) start()
+    }
+
+    /**
+     * Starts analytics, sessions and deferred link matching. Call it after [configure].
+     * Until then [getDeferredLink] waits.
+     */
+    @JvmStatic
+    @Synchronized
+    fun start() {
+        if (!isInitialized) {
+            Log.w(TAG, "[Detour:CONFIG] start called before configure; nothing started.")
+            return
+        }
+        DetourAnalytics.start()
+        started.complete(Unit)
+    }
+
+    /**
+     * Initialize Detour SDK and start it.
      *
      * @param context Application or Activity context
      * @param config Detour configuration
      */
+    @Deprecated(
+        "Use configure, which also starts the SDK unless autoStart is false.",
+        ReplaceWith("Detour.configure(context, config)")
+    )
+    @JvmStatic
+    fun initialize(context: Context, config: DetourConfig) = configure(context, config)
+
+    // Once per launch, so a value changed on the server reaches the app on its next launch.
+    private fun refreshSdkConfig() {
+        scope.launch {
+            if (!isEnabled()) return@launch
+            if (sdkConfigStore.apply(sdkApiClient.fetchConfig(sdkConfigStore.etag()))) {
+                DetourAnalytics.reevaluateWaiting()
+            }
+        }
+    }
+
+    /**
+     * Passes the user's choice from your consent platform. Call it on every launch once the
+     * platform has the choice, not only when it changes: a choice stored on an earlier launch
+     * can stop requests for a purpose, but a grant counts only once passed again on this launch.
+     * Each call replaces the previous consent; pass every purpose in one call.
+     *
+     * @param consentText The text the user agreed to, stored once per version on the Detour server.
+     */
+    @JvmStatic
+    @JvmOverloads
+    @Synchronized
+    fun setConsent(consent: DetourConsent, consentText: String? = null) {
+        if (isInitialized) {
+            recordConsent(consent, consentText)
+        } else {
+            consentBeforeConfigure = consent to consentText
+        }
+    }
+
+    // Recorded before returning, so a request logged right after setConsent is decided by it.
+    private fun recordConsent(consent: DetourConsent, consentText: String?) {
+        val withSchema = consent.schemaVersion?.let { consent }
+            ?: consent.copy(schemaVersion = sdkConfigStore.latest.schemaVersion)
+        consentStore.record(withSchema)
+        DetourAnalytics.reevaluateWaiting()
+        scope.launch {
+            if (!isEnabled()) return@launch
+            sdkApiClient.sendConsent(withSchema, consentText, installStore.getDeviceId(), userIdStore.current())
+        }
+    }
+
+    /**
+     * `false` turns the SDK off for this install, also on later launches, until `setEnabled(true)`.
+     * While off it sends nothing: no analytics, sessions, conversions, consent or matching by device
+     * signals. Links the user taps are still routed, and a click ID from the Play install referrer
+     * still matches the deferred link, without the device ID. The device ID does not change.
+     */
     @JvmStatic
     @Synchronized
-    fun initialize(context: Context, config: DetourConfig) {
-        if (isInitialized) {
-            Log.w(TAG, "SDK already initialized")
-            return
-        }
+    fun setEnabled(enabled: Boolean) {
+        enabledThisLaunch = KillSwitchChange(enabled, System.currentTimeMillis())
+        if (isInitialized) applyKillSwitch()
+    }
 
+    private suspend fun isEnabled(): Boolean = enabledThisLaunch?.enabled ?: installStore.isEnabled()
+
+    // Also resumes a state an earlier launch could not report.
+    private fun applyKillSwitch() {
+        scope.launch {
+            enabledWrite.withLock {
+                enabledThisLaunch?.let { installStore.setEnabled(it.enabled, it.atMs) }
+            }
+            // Drops what waited for consent when the SDK goes off.
+            DetourAnalytics.reevaluateWaiting()
+            killSwitchReporter.sync()
+        }
+    }
+
+    private fun setUp(context: Context, config: DetourConfig): Boolean {
         if (config.apiKey.isBlank() || config.appId.isBlank()) {
             Log.e(TAG, "[Detour] apiKey or appId is missing — SDK will not process links. " +
                        "Set your credentials in DetourConfig.")
-            return
+            return false
         }
 
         this.applicationContext = context.applicationContext
         this.config = config
         DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
-        val requestContext = RequestContextProvider(context.applicationContext) {
-            DetourAnalytics.sessionManager.currentSessionId
-        }
+        this.consentStore = ConsentStore(storage)
+        val requestContext = RequestContextProvider(
+            context.applicationContext,
+            sessionId = { DetourAnalytics.sessionManager.currentSessionId },
+            consentSnapshot = { consentStore.passedThisLaunch?.toWire() },
+        )
         this.apiClient = DetourApiClient(config, context.applicationContext, requestContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.installStore = InstallStore(context.applicationContext.noBackupFilesDir, storage)
         this.userIdStore = UserIdStore(storage)
+        this.sdkApiClient = SdkApiClient(config)
+        this.sdkConfigStore = SdkConfigStore(storage, config.appId)
+        this.killSwitchReporter = KillSwitchReporter(installStore, scope) { enabled, atMs ->
+            sdkApiClient.sendKillSwitch(enabled, atMs, installStore.getDeviceId())
+        }
+        refreshSdkConfig()
 
-        // Initialize analytics subsystem
-        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore)
-        DetourAnalytics.logAppOpenIfNeeded()
+        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore, consentStore, sdkConfigStore, ::isEnabled)
 
         this.isInitialized = true
-        Log.d(TAG, "SDK initialized")
+        applyKillSwitch()
+        consentBeforeConfigure?.let { (consent, text) -> recordConsent(consent, text) }
+        consentBeforeConfigure = null
+        Log.d(TAG, "SDK configured")
+        return true
     }
 
     /**
      * Set the app's own user identifier, sent with every later request. `null` removes it.
      * Must not be an e-mail address or a phone number.
      *
-     * Call after [initialize]; [DetourConfig.userIdValidator] runs on every value.
+     * Call after [configure]; [DetourConfig.userIdValidator] runs on every value.
      */
     @JvmStatic
     fun setUserId(userId: String?) {
         if (!isInitialized) {
-            Log.w(TAG, "SDK not initialized. Call Detour.initialize() first.")
+            Log.w(TAG, "SDK not initialized. Call Detour.configure() first.")
             return
         }
 
@@ -156,7 +303,7 @@ object Detour {
     suspend fun processLink(intent: Intent): LinkResult {
         if (!isInitialized) {
             return LinkResult.Error(
-                IllegalStateException("Detour SDK not initialized. Call Detour.initialize() first.")
+                IllegalStateException("Detour SDK not initialized. Call Detour.configure() first.")
             )
         }
 
@@ -200,7 +347,7 @@ object Detour {
     suspend fun getDeferredLink(): LinkResult {
         if (!isInitialized) {
             return LinkResult.Error(
-                IllegalStateException("Detour SDK not initialized. Call Detour.initialize() first.")
+                IllegalStateException("Detour SDK not initialized. Call Detour.configure() first.")
             )
         }
 
@@ -221,7 +368,7 @@ object Detour {
     @JvmStatic
     suspend fun resolveShortLink(url: String): ShortLinkResponse? {
         if (!isInitialized) {
-            Log.w(TAG, "SDK not initialized. Call Detour.initialize() first.")
+            Log.w(TAG, "SDK not initialized. Call Detour.configure() first.")
             return null
         }
 
@@ -236,7 +383,12 @@ object Detour {
         Log.d(TAG, "Processing Universal Link")
 
         val link = uri.toString()
-        val clickResult = apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
+        // The click is Detour's measurement, not routing, so the kill switch stops it.
+        val clickResult = if (isEnabled()) {
+            apiClient.sendUniversalLinkClick(link, UrlHelpers.parseQueryParams(link))
+        } else {
+            DetourApiClient.UniversalLinkClickResult(allowed = true)
+        }
         if (!clickResult.allowed) {
             Log.e(TAG, "[Detour:CLICK_LIMIT_ERROR] Universal/App link blocked: url=$link error=${clickResult.error} code=${clickResult.code} clicksInPeriod=${clickResult.clicksInPeriod} effectiveLimit=${clickResult.effectiveLimit}")
             return LinkResult.NoLink
@@ -305,7 +457,9 @@ object Detour {
             return LinkResult.NotFirstLaunch
         }
 
-        // Mark as launched
+        // The first-launch flag is stored only when matching runs, so an app closed before
+        // start() still matches on its next launch.
+        started.await()
         installStore.markFirstLaunchHandled()
         Log.d(TAG, "First launch detected, processing deferred link")
 
@@ -316,7 +470,12 @@ object Detour {
         val deviceId = installStore.getDeviceId()
         val userId = userIdStore.current()
 
-        val link: String? = if (clickId != null) {
+        val link: String? = if (!isEnabled()) {
+            // Routing by the click ID still works with the SDK off, with the v1 body only.
+            if (clickId == null) return LinkResult.NoLink
+            Log.d(TAG, "SDK disabled; direct matching with click_id and no device data")
+            apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
+        } else if (clickId != null) {
             Log.d(TAG, "Using direct matching with click_id")
             apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer))
         } else {

@@ -10,3 +10,5 @@
 -keep class com.swmansion.detour.models.ReferrerUtm { *; }
 -keep class com.swmansion.detour.models.LinkMatchResponse { *; }
 -keep class com.swmansion.detour.models.ShortLinkResponse { *; }
+# Gson reads and writes the sdk config and its cache by field name.
+-keep class com.swmansion.detour.consent.** { *; }
