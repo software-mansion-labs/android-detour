@@ -1,5 +1,6 @@
 package com.swmansion.detour.api
 
+import com.swmansion.detour.DetourAttributionConfig
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.analytics.AnalyticsRequest
 import com.swmansion.detour.analytics.DetourConversion
@@ -10,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
@@ -70,6 +72,18 @@ class DetourEndpointsTest {
         assertNull(DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config("http://localhost:3000")))
         assertNull(DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config("ftp://example.com")))
         assertNull(DetourEndpoints.url(DetourEndpoint.MATCH_LINK, config("not a url")))
+    }
+
+    @Test
+    fun `requests report the core package unless attribution is set`() {
+        fun packageHeader(config: DetourConfig) =
+            Request.Builder().url("https://api.example.com").detourHeaders(config).build().header("X-SDK-Package")
+
+        assertEquals("core", packageHeader(config(null)))
+        assertEquals(
+            "mmp",
+            packageHeader(DetourConfig.Builder("key", "app").attribution(DetourAttributionConfig()).build())
+        )
     }
 
     @Test
