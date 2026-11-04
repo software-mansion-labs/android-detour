@@ -8,6 +8,8 @@ import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.api.DetourEndpoints
+import com.swmansion.detour.api.SdkApiClient
+import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identity.UserIdPolicy
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.models.DirectMatchRequest
@@ -22,6 +24,10 @@ import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.InstallStore
 import com.swmansion.detour.utils.UrlHelpers
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -61,6 +67,8 @@ object Detour {
 
     private val started = CompletableDeferred<Unit>()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private lateinit var applicationContext: Context
     private lateinit var config: DetourConfig
     private lateinit var storage: DetourStorage
@@ -69,6 +77,9 @@ object Detour {
     private lateinit var installReferrerHelper: InstallReferrerHelper
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
+    private lateinit var sdkApiClient: SdkApiClient
+    internal lateinit var sdkConfigStore: SdkConfigStore
+        private set
 
     /**
      * Sets up the SDK without sending user data. Call it once in Application.onCreate().
@@ -121,6 +132,13 @@ object Detour {
     @JvmStatic
     fun initialize(context: Context, config: DetourConfig) = configure(context, config)
 
+    // Once per launch, so a value changed on the server reaches the app on its next launch.
+    private fun refreshSdkConfig() {
+        scope.launch {
+            sdkConfigStore.apply(sdkApiClient.fetchConfig(sdkConfigStore.etag()))
+        }
+    }
+
     private fun setUp(context: Context, config: DetourConfig): Boolean {
         if (config.apiKey.isBlank() || config.appId.isBlank()) {
             Log.e(TAG, "[Detour] apiKey or appId is missing — SDK will not process links. " +
@@ -140,6 +158,9 @@ object Detour {
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.installStore = InstallStore(context.applicationContext.noBackupFilesDir, storage)
         this.userIdStore = UserIdStore(storage)
+        this.sdkApiClient = SdkApiClient(config)
+        this.sdkConfigStore = SdkConfigStore(storage, config.appId)
+        refreshSdkConfig()
 
         DetourAnalytics.initialize(config, requestContext, installStore, userIdStore)
 

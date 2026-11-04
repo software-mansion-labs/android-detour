@@ -41,6 +41,7 @@ class DetourEndpointsTest {
             DetourEndpoint.ANALYTICS_RETENTION to "https://godetour.dev/api/analytics/retention",
             DetourEndpoint.ANALYTICS_SESSION to "https://godetour.dev/api/analytics/session",
             DetourEndpoint.ANALYTICS_CONVERSION to "https://godetour.dev/api/analytics/conversion",
+            DetourEndpoint.SDK_CONFIG to "https://godetour.dev/api/sdk/config",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -135,6 +136,7 @@ class ApiClientsBaseUrlTest {
         apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
+        SdkApiClient(config).fetchConfig(etag = null)
         listOf(
             AnalyticsRequest.Event("test", null),
             AnalyticsRequest.Retention("app_open"),

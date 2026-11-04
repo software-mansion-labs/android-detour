@@ -13,6 +13,7 @@ internal enum class DetourEndpoint(val path: String) {
     ANALYTICS_RETENTION("api/analytics/retention"),
     ANALYTICS_SESSION("api/analytics/session"),
     ANALYTICS_CONVERSION("api/analytics/conversion"),
+    SDK_CONFIG("api/sdk/config"),
 }
 
 internal object DetourEndpoints {
