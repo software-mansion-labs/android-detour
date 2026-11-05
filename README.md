@@ -95,7 +95,7 @@ class MainActivity : AppCompatActivity() {
                 // navigate to route
             }
             is LinkResult.NotFirstLaunch -> { /* Already processed on a previous launch */ }
-            is LinkResult.NoLink -> { /* No new link: a normal launch, or the screen was recreated after the link opened. Stay where you are. */ }
+            is LinkResult.NoLink -> { /* Normal app launch without any deep link */ }
             is LinkResult.Error -> {
                 Log.e("MainActivity", "Error processing link", result.exception)
             }
@@ -130,8 +130,6 @@ class MainActivity : AppCompatActivity() {
     }
 }
 ```
-
-`processLink` returns `NoLink` when it gets the same intent again, for example after a rotation. It cannot tell that an activity was restored after process death, so the link opens again then. `DetourDelegate` handles that case.
 
 </details>
 
@@ -261,7 +259,7 @@ sealed class LinkResult {
     ) : LinkResult()
 
     data object NotFirstLaunch : LinkResult()               // Not first launch
-    data object NoLink : LinkResult()                       // Normal app launch, or link already opened
+    data object NoLink : LinkResult()                       // Normal app launch
     data class Error(val exception: Exception) : LinkResult()
 }
 ```

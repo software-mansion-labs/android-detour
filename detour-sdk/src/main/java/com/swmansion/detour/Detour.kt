@@ -116,10 +116,8 @@ object Detour {
      *
      * In [LinkProcessingMode.DEFERRED_ONLY] mode, steps 1-2 are skipped entirely.
      *
-     * A link from an intent opens once. Processing the same intent again, for example after the
-     * activity was recreated, returns [LinkResult.NoLink]. The screen the link opened is already
-     * there then, so do not navigate away on it. A copy of the intent, or another intent with the
-     * same link, opens again, but its click is not sent again within 10 s.
+     * Processing the same App Link again within 10 s, for example after the activity was recreated,
+     * returns it again but does not send its click again.
      *
      * @param intent Activity intent to process
      * @return LinkResult with link data or status
@@ -140,15 +138,13 @@ object Detour {
                     val uriString = uri.toString()
 
                     if (UrlHelpers.isWebUrl(uriString)) {
-                        return LinkOpens.openOnce(intent) {
-                            // Mark first entrance so subsequent launches don't try deferred matching
-                            firstLaunchDetector.markAsLaunched()
-                            processUniversalLink(uri)
-                        }
+                        // Mark first entrance so subsequent launches don't try deferred matching
+                        firstLaunchDetector.markAsLaunched()
+                        return processUniversalLink(uri)
                     }
 
                     if (config.linkProcessingMode == LinkProcessingMode.ALL) {
-                        return LinkOpens.openOnce(intent) { processSchemeLink(uri) }
+                        return processSchemeLink(uri)
                     }
                 }
             }
