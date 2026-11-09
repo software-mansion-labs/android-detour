@@ -99,10 +99,12 @@ object Detour {
     private val enabledWrite = Mutex()
 
     /**
-     * Sets up the SDK without sending user data. Call it once in Application.onCreate().
+     * Sets up the SDK. Call it once in Application.onCreate().
      *
-     * With `autoStart = false` nothing that collects data runs until [start], so the app can wait
-     * for its consent platform first. Routing of links the user taps works either way.
+     * With `autoStart = false` analytics, sessions and deferred link matching wait for [start],
+     * so the app can wait for its consent platform first. Links the user taps are routed and
+     * counted either way: for each one the SDK sends the link, app version, OS version and device
+     * model before [start], because your plan's click limit applies to it.
      *
      * @param context Application or Activity context
      * @param config Detour configuration
@@ -165,7 +167,11 @@ object Detour {
      * can stop requests for a purpose, but a grant counts only once passed again on this launch.
      * Each call replaces the previous consent; pass every purpose in one call.
      *
+     * Calling it on every launch is cheap: a choice the Detour server already has is not sent
+     * again, unless you pass its [DetourConsent.timestampMs].
+     *
      * @param consentText The text the user agreed to, stored once per version on the Detour server.
+     *   An empty text is treated as not given.
      */
     @JvmStatic
     @JvmOverloads
@@ -182,12 +188,11 @@ object Detour {
     private fun recordConsent(consent: DetourConsent, consentText: String?) {
         val withSchema = consent.schemaVersion?.let { consent }
             ?: consent.copy(schemaVersion = sdkConfigStore.latest.schemaVersion)
-        consentStore.record(withSchema)
-        DetourAnalytics.reevaluateWaiting()
-        scope.launch {
-            if (!isEnabled()) return@launch
-            sdkApiClient.sendConsent(withSchema, consentText, installStore.getDeviceId(), userIdStore.current())
+        // Not sent while the SDK is off; it stays unconfirmed, so the next setConsent sends it.
+        consentStore.record(withSchema, installStore::getDeviceId) { consent, deviceId ->
+            isEnabled() && sdkApiClient.sendConsent(consent, consentText, deviceId, userIdStore.current())
         }
+        DetourAnalytics.reevaluateWaiting()
     }
 
     /**

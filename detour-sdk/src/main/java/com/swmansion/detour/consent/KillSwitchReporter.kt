@@ -1,6 +1,8 @@
 package com.swmansion.detour.consent
 
+import android.util.Log
 import com.swmansion.detour.storage.InstallStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -32,7 +34,16 @@ internal class KillSwitchReporter(
 
     init {
         scope.launch {
-            for (wakeUp in wakeUps) run()
+            for (wakeUp in wakeUps) {
+                // A failed run must not end the loop, or later changes on this launch go unreported.
+                try {
+                    run()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "[Detour:KILL_SWITCH] Reporting failed; tried again on the next change or launch.", e)
+                }
+            }
         }
     }
 
@@ -60,6 +71,7 @@ internal class KillSwitchReporter(
     }
 
     companion object {
+        private const val TAG = "KillSwitchReporter"
         const val FIRST_RETRY_DELAY_MS = 5_000L
         const val MAX_RETRY_DELAY_MS = 300_000L
     }

@@ -4,14 +4,18 @@ import com.google.gson.JsonParser
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.HttpClient
 import com.swmansion.detour.api.RequestContext
+import com.swmansion.detour.api.SdkApiClient
 import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.test.InMemoryStorage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 class ConsentGateTest {
 
@@ -62,6 +66,8 @@ class ConsentGateTest {
     }
 }
 
+// Robolectric, because a failing send logs with android.util.Log.
+@RunWith(RobolectricTestRunner::class)
 class DetourConsentTest {
 
     private val consent = DetourConsent(
@@ -89,10 +95,96 @@ class DetourConsentTest {
     @Test
     fun `stored consent survives relaunch`() = runTest {
         val storage = InMemoryStorage()
-        ConsentStore(storage, scope = this).record(consent)
+        ConsentStore(storage, scope = this).record(consent, { "device" }) { _, _ -> true }
         advanceUntilIdle()
 
         assertEquals(consent, ConsentStore(storage).stored())
+    }
+
+    private val choice = DetourConsent(mapOf(DetourPurpose.ANALYTICS to true), schemaVersion = 1)
+
+    /** Records [consent] on a fresh launch and returns what was sent. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun TestScope.launchWith(
+        storage: InMemoryStorage,
+        consent: DetourConsent,
+        nowMs: Long,
+        confirmed: Boolean = true,
+        deviceId: String = "device",
+    ): Pair<ConsentStore, List<DetourConsent>> {
+        val sent = mutableListOf<DetourConsent>()
+        val store = ConsentStore(storage, scope = this, now = { nowMs })
+        store.record(consent, { deviceId }) { sentConsent, _ -> sent.add(sentConsent); confirmed }
+        advanceUntilIdle()
+        return store to sent
+    }
+
+    @Test
+    fun `unchanged confirmed choice is not sent again and keeps its time`() = runTest {
+        val storage = InMemoryStorage()
+        launchWith(storage, choice, nowMs = 1_000)
+
+        val (store, sent) = launchWith(storage, choice, nowMs = 2_000)
+
+        assertEquals(emptyList<DetourConsent>(), sent)
+        assertEquals(1_000L, store.passedThisLaunch?.timestampMs)
+    }
+
+    @Test
+    fun `choice confirmed for another device id is sent again`() = runTest {
+        val storage = InMemoryStorage()
+        launchWith(storage, choice, nowMs = 1_000, deviceId = "old-device")
+
+        val (_, sent) = launchWith(storage, choice, nowMs = 2_000, deviceId = "restored-device")
+
+        assertEquals(listOf(choice.copy(timestampMs = 2_000)), sent)
+    }
+
+    @Test
+    fun `failing send does not crash`() = runTest {
+        val store = ConsentStore(InMemoryStorage(), scope = this)
+        store.record(choice, { throw IllegalStateException("device id read failed") }) { _, _ -> true }
+        advanceUntilIdle()
+
+        assertEquals(choice, store.passedThisLaunch?.copy(timestampMs = null))
+    }
+
+    @Test
+    fun `changed choice is sent`() = runTest {
+        val storage = InMemoryStorage()
+        launchWith(storage, choice, nowMs = 1_000)
+
+        val changed = choice.copy(purposes = mapOf(DetourPurpose.ANALYTICS to false))
+        val (_, sent) = launchWith(storage, changed, nowMs = 2_000)
+
+        assertEquals(listOf(changed.copy(timestampMs = 2_000)), sent)
+    }
+
+    @Test
+    fun `unconfirmed choice is sent again on the next launch`() = runTest {
+        val storage = InMemoryStorage()
+        launchWith(storage, choice, nowMs = 1_000, confirmed = false)
+
+        val (_, sent) = launchWith(storage, choice, nowMs = 2_000)
+
+        assertEquals(listOf(choice.copy(timestampMs = 2_000)), sent)
+    }
+
+    @Test
+    fun `choice with its own time is sent`() = runTest {
+        val storage = InMemoryStorage()
+        launchWith(storage, choice, nowMs = 1_000)
+
+        val timed = choice.copy(timestampMs = 1_500)
+        val (_, sent) = launchWith(storage, timed, nowMs = 2_000)
+
+        assertEquals(listOf(timed), sent)
+    }
+
+    @Test
+    fun `empty consent text is not sent`() {
+        assertNull(SdkApiClient.consentBody(consent, "", "device", null)["consent_text"])
+        assertEquals("text", SdkApiClient.consentBody(consent, "text", "device", null)["consent_text"])
     }
 
     @Test

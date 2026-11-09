@@ -8,6 +8,7 @@ import com.swmansion.detour.storage.InstallStore
 import com.swmansion.detour.test.InMemoryStorage
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -127,6 +128,27 @@ class KillSwitchTest {
         withContext(Dispatchers.Default) { withTimeout(5_000) { bothSent.await() } }
 
         assertEquals(listOf(false, true), sent.toList())
+    }
+
+    @Test
+    fun `failed run does not stop later reports`() = runTest {
+        val store = store()
+        store.setEnabled(false, at)
+        val sent = Collections.synchronizedList(mutableListOf<Boolean>())
+        val secondSent = CompletableDeferred<Unit>()
+        val reporter = KillSwitchReporter(store, backgroundScope) { enabled, _ ->
+            sent.add(enabled)
+            if (sent.size == 1) throw IllegalStateException("storage read failed")
+            secondSent.complete(Unit)
+            Outcome.CONFIRMED
+        }
+
+        reporter.sync()
+        withContext(Dispatchers.Default) { withTimeout(5_000) { while (sent.isEmpty()) delay(10) } }
+        reporter.sync()
+        withContext(Dispatchers.Default) { withTimeout(5_000) { secondSent.await() } }
+
+        assertEquals(listOf(false, false), sent.toList())
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.swmansion.detour.api
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.KillSwitchReporter.Outcome
@@ -47,15 +48,12 @@ internal class SdkApiClient(private val config: DetourConfig) {
         }
     }
 
-    suspend fun sendConsent(consent: DetourConsent, consentText: String?, deviceId: String, userId: String?) {
-        val body = buildMap<String, Any> {
-            put("device_id", deviceId)
-            userId?.let { put("user_id", it) }
-            put("consent", consent.toWire())
-            consentText?.let { put("consent_text", it) }
-        }
-        val status = post(DetourEndpoint.SDK_CONSENT, body) ?: return
-        if (status !in 200..299) Log.w(TAG, "[Detour:CONSENT] sdk/consent send failed: $status")
+    /** `true` when the server confirmed the consent. */
+    suspend fun sendConsent(consent: DetourConsent, consentText: String?, deviceId: String, userId: String?): Boolean {
+        val status = post(DetourEndpoint.SDK_CONSENT, consentBody(consent, consentText, deviceId, userId)) ?: return false
+        val confirmed = status in 200..299
+        if (!confirmed) Log.w(TAG, "[Detour:CONSENT] sdk/consent send failed: $status")
+        return confirmed
     }
 
     suspend fun sendKillSwitch(enabled: Boolean, atMs: Long, deviceId: String): Outcome {
@@ -103,7 +101,17 @@ internal class SdkApiClient(private val config: DetourConfig) {
         }
     }
 
-    private companion object {
-        const val TAG = "SdkApiClient"
+    companion object {
+        private const val TAG = "SdkApiClient"
+
+        // The server rejects the whole consent for an empty text, so an empty text is not sent.
+        @VisibleForTesting
+        internal fun consentBody(consent: DetourConsent, consentText: String?, deviceId: String, userId: String?) =
+            buildMap<String, Any> {
+                put("device_id", deviceId)
+                userId?.let { put("user_id", it) }
+                put("consent", consent.toWire())
+                consentText?.takeIf { it.isNotEmpty() }?.let { put("consent_text", it) }
+            }
     }
 }

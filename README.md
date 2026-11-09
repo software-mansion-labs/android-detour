@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
 
 ### Starting after consent
 
-`configure` starts the SDK right away. If your app collects consent first, pass `autoStart = false`: the SDK is set up but sends no user data, and `start()` begins analytics, sessions and deferred link matching. Links the user taps are routed before `start()`; `getDeferredLink()` waits until `start()` runs.
+`configure` starts the SDK right away. If your app collects consent first, pass `autoStart = false`: the SDK is set up, and `start()` begins analytics, sessions and deferred link matching. Links the user taps are routed and counted before `start()`: for each one the SDK sends the link, app version, OS version and device model, because your plan's click limit applies to it. `getDeferredLink()` waits until `start()` runs.
 
 ```kotlin
 Detour.configure(this, config, autoStart = false)
@@ -146,7 +146,7 @@ Detour.start()
 
 `Detour.initialize(context, config)` still works and is deprecated; it is the same as `Detour.configure(context, config)`.
 
-To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.ANALYTICS` and others), and a purpose missing from the map is not granted. Each call replaces the previous consent, so pass every purpose in one call. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start()` only after it.
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.ANALYTICS` and others), and a purpose missing from the map is not granted. Each call replaces the previous consent, so pass every purpose in one call. Calling it on every launch is cheap: a choice the Detour server already has is not sent again. Leave `timestampMs` out unless your consent platform gives the time of the choice; without it the SDK uses the time it first sends the choice. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start()` only after it.
 
 ```kotlin
 Detour.setConsent(

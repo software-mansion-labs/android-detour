@@ -6,7 +6,8 @@ import com.swmansion.detour.utils.IsoTimestamp
  * The user's choice from your consent platform, passed with [com.swmansion.detour.Detour.setConsent].
  *
  * @property purposes Purpose ID ([DetourPurpose]) → granted. A purpose missing from the map is not granted.
- * @property timestampMs When the user made the choice.
+ * @property timestampMs When the user made the choice. `null` when you do not know it: the SDK
+ *   then sends the time it first sends this choice, and does not send the same choice again.
  * @property consentTextRef The version of the consent text the user saw, for example the consent platform's version.
  * @property schemaVersion Version of the purpose list. `null` uses the version from the Detour server.
  * @property region The user's legal regime, for example `eea`.
@@ -14,7 +15,7 @@ import com.swmansion.detour.utils.IsoTimestamp
  */
 data class DetourConsent @JvmOverloads constructor(
     val purposes: Map<String, Boolean>,
-    val timestampMs: Long = System.currentTimeMillis(),
+    val timestampMs: Long? = null,
     val consentTextRef: String? = null,
     val schemaVersion: Int? = null,
     val region: String? = null,
@@ -23,7 +24,7 @@ data class DetourConsent @JvmOverloads constructor(
     /** The wire format of the API contract, also used to store the consent on the device. */
     internal fun toWire(): Map<String, Any> = buildMap {
         put("purposes", purposes)
-        put("timestamp", IsoTimestamp.format(timestampMs))
+        timestampMs?.let { put("timestamp", IsoTimestamp.format(it)) }
         consentTextRef?.let { put("consent_text_ref", it) }
         schemaVersion?.let { put("schema_version", it) }
         region?.let { put("region", it) }
