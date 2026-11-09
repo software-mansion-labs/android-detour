@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
+import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.api.DetourEndpoints
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.identity.userIdRejection
@@ -91,7 +92,10 @@ object Detour {
         this.config = config
         DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
-        this.apiClient = DetourApiClient(config, context.applicationContext)
+        val requestContext = RequestContextProvider(context.applicationContext) {
+            DetourAnalytics.sessionManager.currentSessionId
+        }
+        this.apiClient = DetourApiClient(config, context.applicationContext, requestContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
         this.installStore = InstallStore(
@@ -102,7 +106,7 @@ object Detour {
         this.userIdStore = UserIdStore(storage, config.userIdValidator)
 
         // Initialize analytics subsystem
-        DetourAnalytics.initialize(config, installStore, userIdStore)
+        DetourAnalytics.initialize(config, requestContext, installStore, userIdStore)
         DetourAnalytics.logAppOpenIfNeeded()
 
         this.isInitialized = true

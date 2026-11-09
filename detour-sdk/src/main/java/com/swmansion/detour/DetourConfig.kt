@@ -17,6 +17,7 @@ import com.swmansion.detour.storage.DetourStorage
  *                   [Detour.initialize]; returning `false` drops the value and clears the stored one.
  *                   Use it to reject values that must not leave the device, such as e-mail addresses
  *                   or phone numbers.
+ * @property attribution Turns on attribution mode (see [DetourAttributionConfig]). `null` keeps the core SDK.
  */
 data class DetourConfig(
     val apiKey: String,
@@ -24,7 +25,8 @@ data class DetourConfig(
     val linkProcessingMode: LinkProcessingMode = LinkProcessingMode.ALL,
     val storage: DetourStorage? = null,
     val baseUrl: String? = null,
-    val userIdValidator: ((String) -> Boolean)? = null
+    val userIdValidator: ((String) -> Boolean)? = null,
+    val attribution: DetourAttributionConfig? = null
 ) {
     /**
      * Builder for Java callers (data class defaults don't work from Java).
@@ -40,11 +42,13 @@ data class DetourConfig(
         private var storage: DetourStorage? = null
         private var baseUrl: String? = null
         private var userIdValidator: ((String) -> Boolean)? = null
+        private var attribution: DetourAttributionConfig? = null
 
         fun linkProcessingMode(value: LinkProcessingMode) = apply { linkProcessingMode = value }
         fun storage(value: DetourStorage) = apply { storage = value }
         fun baseUrl(value: String) = apply { baseUrl = value }
         fun userIdValidator(value: (String) -> Boolean) = apply { userIdValidator = value }
+        fun attribution(value: DetourAttributionConfig) = apply { attribution = value }
 
         fun build(): DetourConfig = DetourConfig(
             apiKey = apiKey,
@@ -52,7 +56,8 @@ data class DetourConfig(
             linkProcessingMode = linkProcessingMode,
             storage = storage,
             baseUrl = baseUrl,
-            userIdValidator = userIdValidator
+            userIdValidator = userIdValidator,
+            attribution = attribution
         )
     }
 }

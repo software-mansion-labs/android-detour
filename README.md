@@ -221,6 +221,26 @@ Detour.setUserId("u_12345")
 Detour.setUserId(null)
 ```
 
+To report revenue, log a conversion. Use `RevenueType.IAP` for purchases and subscriptions and `RevenueType.IN_APP_ADS` for ad revenue; pass the store's order ID so a repeated purchase is counted once. A conversion sends its name, revenue, currency, revenue type, product ID, quantity and transaction ID. `revenue` in `logEvent` data, for any event, is deprecated and does not count as revenue.
+
+`logConversion` drops a conversion that the backend would reject, with a warning that names the field: `name` and `transactionId` must have 1 to 255 characters, `productId` at most 255, `revenue` must be at least 0 and less than 1,000,000,000,000, `currency` must be a three-letter ISO 4217 code, and `quantity` must be at least 0.
+
+```kotlin
+DetourAnalytics.logConversion(
+    DetourConversion(
+        name = "purchase",
+        revenue = BigDecimal("4.99"),
+        currency = "USD",
+        revenueType = RevenueType.IAP,
+        productId = "coins_500",
+        quantity = 1,
+        transactionId = purchase.orderId,
+    )
+)
+```
+
+Sessions are reported automatically after `Detour.initialize()`: the start and end of each use of the app with its duration, under a random session ID kept in memory only. More than 30 minutes in the background starts a new session.
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types
@@ -253,11 +273,16 @@ data class DetourConfig(
     val baseUrl: String? = null,
 
     /** Checks every setUserId value and the stored value at initialize; false drops the value and clears the stored one (default: null). */
-    val userIdValidator: ((String) -> Boolean)? = null
+    val userIdValidator: ((String) -> Boolean)? = null,
+
+    /** Turns on attribution mode (default: null = core SDK). */
+    val attribution: DetourAttributionConfig? = null
 )
 ```
 
 `baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.initialize` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
+
+`attribution = DetourAttributionConfig()` turns on attribution mode: requests tell the Detour backend that they come from an app that uses attribution, so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan, consent and each network's settings). It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
 
 </details>
 
@@ -384,6 +409,9 @@ class DetourDelegate(
 object DetourAnalytics {
     /** Log a predefined analytics event with optional data. */
     fun logEvent(eventName: DetourEventNames, data: Any? = null)
+
+    /** Log a conversion with revenue. */
+    fun logConversion(conversion: DetourConversion)
 
     /** Log a retention event. */
     fun logRetention(eventName: String)

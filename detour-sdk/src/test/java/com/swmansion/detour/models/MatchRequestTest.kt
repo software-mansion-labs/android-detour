@@ -2,6 +2,9 @@ package com.swmansion.detour.models
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.swmansion.detour.api.DetourApiClient
+import com.swmansion.detour.api.RequestContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -48,5 +51,21 @@ class MatchRequestTest {
             ),
             body.keySet(),
         )
+    }
+
+    @Test
+    fun `match-link body is flat and keeps the locale signals`() {
+        val request = SignalMatchRequest(
+            platform = "android", model = "Pixel 8", manufacturer = "Google", systemVersion = "14",
+            screenWidth = 1080, screenHeight = 2400, scale = 2.6f,
+            locale = listOf(LocaleInfo("pl-PL")), timezone = "Europe/Warsaw", userAgent = "ua", timestamp = 0,
+        )
+        val context = RequestContext(appVersion = "4.2.0", networkType = "wifi", locale = "pl-PL")
+
+        val body = JsonParser.parseString(DetourApiClient.matchLinkJson(request, context)).asJsonObject
+
+        assertEquals("4.2.0", body["app_version"].asString)
+        assertEquals("wifi", body["network_type"].asString)
+        assertEquals("pl-PL", body["locale"].asJsonArray[0].asJsonObject["languageTag"].asString)
     }
 }
