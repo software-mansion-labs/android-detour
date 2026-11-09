@@ -138,30 +138,47 @@ internal class InstallReferrerHelper(private val context: Context) {
     internal fun extractClickId(referrerUrl: String): String? = parseReferrerParams(referrerUrl)["click_id"]
 
     /**
-     * Decodes the referrer once and splits it into parameters. The first value of a repeated key
-     * wins; empty values are left out. Values are kept as they are, so a gclid keeps its case.
+     * Splits the referrer into parameters, then URL-decodes each key and value, so an encoded
+     * `&` or `=` stays inside its value. A referrer with no `=` but with `%3D` is encoded twice
+     * and gets decoded once before splitting. One leading `?` is ignored. The first value of a
+     * repeated key wins; empty keys and values are left out. Values keep their case (gclid).
      */
     @VisibleForTesting
     internal fun parseReferrerParams(raw: String): Map<String, String> {
-        val decoded = try {
-            URLDecoder.decode(raw, "UTF-8")
-        } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Install referrer is not URL-encoded correctly; parsing it as is", e)
-            raw
-        }
-        return decoded.split("&")
+        val query = unwrapDoubleEncoding(raw).removePrefix("?")
+        return query.split("&")
             .mapNotNull { param ->
                 val separator = param.indexOf('=')
                 if (separator <= 0 || separator == param.lastIndex) return@mapNotNull null
-                param.substring(0, separator) to param.substring(separator + 1)
+                decode(param.substring(0, separator)) to decode(param.substring(separator + 1))
             }
             .distinctBy { it.first }
             .toMap()
+    }
+
+    private fun unwrapDoubleEncoding(raw: String): String {
+        if (raw.contains('=') || !raw.contains("%3D", ignoreCase = true)) return raw
+        return decode(raw)
+    }
+
+    private fun decode(part: String): String = try {
+        URLDecoder.decode(part, "UTF-8")
+    } catch (e: IllegalArgumentException) {
+        Log.w(TAG, "Install referrer part is not URL-encoded correctly; using it as is", e)
+        part
     }
 
     companion object {
         private const val TAG = "InstallReferrerHelper"
         private const val RETRY_DELAY_MS = 1_000L
         private val EMPTY_UTM = ReferrerUtm(null, null, null, null, null)
+        private val UUID_REGEX =
+            Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", RegexOption.IGNORE_CASE)
+
+        /**
+         * The backend matches only UUID click IDs. Other values, like `null` from older
+         * Detour Play Store links or an ID from another tool, need signal matching instead.
+         */
+        fun isDirectMatchClickId(clickId: String): Boolean = UUID_REGEX.matches(clickId)
     }
 }
