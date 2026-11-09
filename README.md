@@ -221,7 +221,9 @@ Detour.setUserId("u_12345")
 Detour.setUserId(null)
 ```
 
-To report revenue, log a conversion. Use `RevenueType.IAP` for purchases and subscriptions and `RevenueType.IN_APP_ADS` for ad revenue; pass the store's order ID so a repeated purchase is counted once. `logEvent(DetourEventNames.Purchase)` with a `revenue` value is deprecated and does not count as revenue.
+To report revenue, log a conversion. Use `RevenueType.IAP` for purchases and subscriptions and `RevenueType.IN_APP_ADS` for ad revenue; pass the store's order ID so a repeated purchase is counted once. A conversion sends its name, revenue, currency, revenue type, product ID, quantity and transaction ID. `revenue` in `logEvent` data, for any event, is deprecated and does not count as revenue.
+
+`logConversion` drops a conversion that the backend would reject, with a warning that names the field: `name` and `transactionId` must have 1 to 255 characters, `productId` at most 255, `revenue` must be at least 0 and less than 1,000,000,000,000, `currency` must be a three-letter ISO 4217 code, and `quantity` must be at least 0.
 
 ```kotlin
 DetourAnalytics.logConversion(
