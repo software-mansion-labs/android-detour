@@ -1,5 +1,6 @@
 package com.swmansion.detour.storage
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -20,6 +21,7 @@ import java.util.UUID
 internal class InstallStore(
     noBackupDir: File,
     private val legacyStorage: DetourStorage,
+    private val isAppUpdate: () -> Boolean?,
 ) {
     private data class State(
         val deviceId: String,
@@ -83,9 +85,12 @@ internal class InstallStore(
 
         // PROVISIONAL: an app updated from an SDK that kept these values in DetourStorage keeps
         // its device ID and first-launch flag, so the update is not counted as a new install
-        // and the deferred link is not opened again. The old keys are removed after the move.
+        // and the deferred link is not opened again. DetourStorage is in Auto Backup, so a fresh
+        // install restored from such a backup has the same keys. The keys count as an update only
+        // when firstInstallTime != lastUpdateTime (or the times cannot be read); otherwise a new
+        // install starts. The old keys are removed in both cases.
         val legacy = readLegacyState()
-        val created = legacy ?: State(newDeviceId(), firstLaunchHandled = false)
+        val created = legacy?.takeIf { isAppUpdate() != false } ?: State(newDeviceId(), firstLaunchHandled = false)
         state = created
         if (save(created) && legacy != null) {
             legacyStorage.removeItem(StorageKeys.DEVICE_ID)
@@ -144,6 +149,15 @@ internal class InstallStore(
     }
 
     companion object {
+        /** `true` after an app update, `false` on a fresh install, `null` when it cannot be read. */
+        fun isAppUpdate(context: Context): Boolean? = runCatching {
+            @Suppress("DEPRECATION")
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            info.firstInstallTime != info.lastUpdateTime
+        }.onFailure {
+            Log.w(TAG, "[Detour:STORAGE] Failed to read the app install times.", it)
+        }.getOrNull()
+
         private const val TAG = "InstallStore"
         private const val FILE_NAME = "detour_install.json"
         private const val KEY_DEVICE_ID = "deviceId"

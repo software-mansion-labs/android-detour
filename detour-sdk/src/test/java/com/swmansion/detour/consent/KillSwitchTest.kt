@@ -31,7 +31,7 @@ class KillSwitchTest {
 
     private val at = 1_760_445_000_000L
 
-    private fun store() = InstallStore(folder.root, InMemoryStorage())
+    private fun store() = InstallStore(folder.root, InMemoryStorage()) { true }
 
     @Test
     fun `disabled state survives relaunch and keeps the device id`() = runTest {

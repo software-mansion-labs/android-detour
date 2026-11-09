@@ -13,8 +13,8 @@ import com.swmansion.detour.consent.ConsentStore
 import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.KillSwitchReporter
 import com.swmansion.detour.consent.SdkConfigStore
-import com.swmansion.detour.identity.UserIdPolicy
 import com.swmansion.detour.identity.UserIdStore
+import com.swmansion.detour.identity.userIdRejection
 import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.models.LinkProcessingMode
 import com.swmansion.detour.models.LinkResult
@@ -237,8 +237,12 @@ object Detour {
         this.apiClient = DetourApiClient(config, context.applicationContext, requestContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
-        this.installStore = InstallStore(context.applicationContext.noBackupFilesDir, storage)
-        this.userIdStore = UserIdStore(storage)
+        this.installStore = InstallStore(
+            context.applicationContext.noBackupFilesDir,
+            storage,
+            isAppUpdate = { InstallStore.isAppUpdate(context.applicationContext) },
+        )
+        this.userIdStore = UserIdStore(storage, config.userIdValidator)
         this.sdkApiClient = SdkApiClient(config)
         this.sdkConfigStore = SdkConfigStore(storage, config.appId)
         this.killSwitchReporter = KillSwitchReporter(installStore, scope) { enabled, atMs ->
@@ -258,9 +262,14 @@ object Detour {
 
     /**
      * Set the app's own user identifier, sent with every later request. `null` removes it.
+     * A stable account ID: the same for the user on every install, never a guest or anonymous ID.
      * Must not be an e-mail address or a phone number.
      *
-     * Call after [configure]; [DetourConfig.userIdValidator] runs on every value.
+     * The value must have 1 to 256 characters; any other value is dropped with a warning and
+     * clears the stored one. Call after [configure].
+     *
+     * [DetourConfig.userIdValidator] checks every value passed here and the stored value at
+     * [configure]; returning `false` drops the value and clears the stored one.
      */
     @JvmStatic
     fun setUserId(userId: String?) {
@@ -276,8 +285,9 @@ object Detour {
 
         // A rejected value also clears the previous one, so requests never go out
         // with the identifier of the user the app has just switched away from.
-        if (!UserIdPolicy.isAllowed(userId) || config.userIdValidator?.invoke(userId) == false) {
-            Log.w(TAG, "[Detour:IDENTITY] setUserId value rejected by the validator; not stored or sent.")
+        val rejection = userIdRejection(userId, config.userIdValidator)
+        if (rejection != null) {
+            Log.w(TAG, "[Detour:IDENTITY] setUserId value $rejection; not stored or sent.")
             userIdStore.set(null)
             return
         }
