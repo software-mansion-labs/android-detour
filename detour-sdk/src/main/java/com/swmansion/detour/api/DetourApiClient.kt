@@ -116,52 +116,51 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
         val effectiveLimit: Int? = null
     )
 
-    suspend fun sendUniversalLinkClick(url: String, params: Map<String, String> = emptyMap()): UniversalLinkClickResult = withContext(Dispatchers.IO) {
+    sealed interface UniversalLinkClickOutcome {
+        /** The server saved the click. [result] says whether the link may open. */
+        data class Saved(val result: UniversalLinkClickResult) : UniversalLinkClickOutcome
+
+        /** A network error or an error response. The click can be sent again. */
+        data object NotSaved : UniversalLinkClickOutcome
+    }
+
+    /**
+     * Saves a click on a Universal/App Link.
+     */
+    suspend fun sendUniversalLinkClick(url: String, params: Map<String, String> = emptyMap()): UniversalLinkClickOutcome = withContext(Dispatchers.IO) {
         try {
-            val body = mutableMapOf<String, Any>(
-                "url" to url,
-                "timestamp" to System.currentTimeMillis(),
-                "platform" to "android",
-                "metadata" to buildMetadata()
-            )
-            if (params.isNotEmpty()) body["params"] = params
-            val payload = HttpClient.gson.toJson(body)
-            val request = Request.Builder()
-                .url(UNIVERSAL_LINK_CLICK_URL)
-                .post(payload.toRequestBody(HttpClient.JSON))
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${config.apiKey}")
-                .addHeader("X-App-ID", config.appId)
-                .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
-                .build()
-
+            val request = buildUniversalLinkClickRequest(url, params)
             HttpClient.shortTimeoutOkHttp.newCall(request).execute().use { response ->
-                val bodyString = try { response.body?.string() } catch (e: Exception) { null }
-                val parsed = bodyString?.let {
-                    runCatching {
-                        HttpClient.gson.fromJson(it, UniversalLinkClickResponse::class.java)
-                    }.getOrNull()
+                val body = try { response.body?.string() } catch (e: Exception) { null }
+                val outcome = universalLinkClickOutcome(response.code, body)
+                if (outcome == UniversalLinkClickOutcome.NotSaved) {
+                    Log.w(TAG, "[Detour:NETWORK_ERROR] Universal link click not saved: ${response.code}")
                 }
-
-                val isExplicitDeny = parsed?.allowed == false || response.code == 402
-                if (isExplicitDeny) {
-                    return@use UniversalLinkClickResult(
-                        allowed = false,
-                        error = parsed?.error ?: "Click limit exceeded",
-                        code = parsed?.code,
-                        clicksInPeriod = parsed?.clicksInPeriod,
-                        effectiveLimit = parsed?.effectiveLimit
-                    )
-                }
-
-                // Fail-open for temporary backend/network issues so apps keep working.
-                UniversalLinkClickResult(allowed = true, clickId = parsed?.clickId)
+                outcome
             }
         } catch (e: Exception) {
-            // Fail-open on transport errors; limit enforcement only happens on explicit deny.
-            Log.w(TAG, "[Detour:NETWORK_ERROR] sendUniversalLinkClick failed, allowing through", e)
-            UniversalLinkClickResult(allowed = true)
+            Log.w(TAG, "[Detour:NETWORK_ERROR] Universal link click not sent", e)
+            UniversalLinkClickOutcome.NotSaved
         }
+    }
+
+    private fun buildUniversalLinkClickRequest(url: String, params: Map<String, String>): Request {
+        val body = mutableMapOf<String, Any>(
+            "url" to url,
+            "timestamp" to System.currentTimeMillis(),
+            "platform" to "android",
+            "metadata" to buildMetadata()
+        )
+        if (params.isNotEmpty()) body["params"] = params
+        val payload = HttpClient.gson.toJson(body)
+        return Request.Builder()
+            .url(UNIVERSAL_LINK_CLICK_URL)
+            .post(payload.toRequestBody(HttpClient.JSON))
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Authorization", "Bearer ${config.apiKey}")
+            .addHeader("X-App-ID", config.appId)
+            .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
+            .build()
     }
 
     private fun buildMetadata(): Map<String, String?> {
@@ -186,5 +185,27 @@ internal class DetourApiClient(private val config: DetourConfig, private val con
         private const val MATCH_LINK_URL = "https://godetour.dev/api/link/match-link"
         private const val RESOLVE_SHORT_URL = "https://godetour.dev/api/link/resolve-short"
         private const val UNIVERSAL_LINK_CLICK_URL = "https://godetour.dev/api/link/universal-link-click"
+
+        internal fun universalLinkClickOutcome(statusCode: Int, body: String?): UniversalLinkClickOutcome {
+            val parsed = body?.let {
+                runCatching { HttpClient.gson.fromJson(it, UniversalLinkClickResponse::class.java) }.getOrNull()
+            }
+
+            // Limits apply only on an explicit deny. Other errors let the link open.
+            if (parsed?.allowed == false || statusCode == 402) {
+                return UniversalLinkClickOutcome.Saved(
+                    UniversalLinkClickResult(
+                        allowed = false,
+                        error = parsed?.error ?: "Click limit exceeded",
+                        code = parsed?.code,
+                        clicksInPeriod = parsed?.clicksInPeriod,
+                        effectiveLimit = parsed?.effectiveLimit
+                    )
+                )
+            }
+            if (statusCode !in 200..299) return UniversalLinkClickOutcome.NotSaved
+
+            return UniversalLinkClickOutcome.Saved(UniversalLinkClickResult(allowed = true, clickId = parsed?.clickId))
+        }
     }
 }
