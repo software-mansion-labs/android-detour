@@ -160,7 +160,7 @@ Use `DEFERRED_ONLY` when your navigation framework already handles App Links and
 
 ### Custom storage
 
-The SDK uses `SharedPreferences` by default. You can provide a custom storage implementation via `DetourConfig`:
+The SDK uses `SharedPreferences` by default. You can provide a custom storage implementation via `DetourConfig`. The device ID and the first-launch flag never use it: they live in a file in `noBackupFilesDir`, so a reinstall or a restored phone gets a new device ID.
 
 <details>
 <summary>Custom storage example</summary>
@@ -211,6 +211,16 @@ DetourAnalytics.logRetention("week_1")
 
 </details>
 
+To link events to your own user account, pass your user identifier after the user signs in, and `null` after sign-out. A stable account ID: the same for the user on every install, never a guest or anonymous ID. Do not pass an e-mail address or a phone number.
+
+The value must have 1 to 256 characters; any other value is dropped with a warning and clears the stored one. `DetourConfig.userIdValidator` checks every `setUserId` value and the stored value at `initialize`; returning `false` drops the value and clears the stored one.
+
+```kotlin
+Detour.setUserId("u_12345")
+// ...
+Detour.setUserId(null)
+```
+
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
 ## Types
@@ -240,7 +250,10 @@ data class DetourConfig(
     val storage: DetourStorage? = null,
 
     /** Detour API host for tests and non-production environments (default: null = production Detour API). */
-    val baseUrl: String? = null
+    val baseUrl: String? = null,
+
+    /** Checks every setUserId value and the stored value at initialize; false drops the value and clears the stored one (default: null). */
+    val userIdValidator: ((String) -> Boolean)? = null
 )
 ```
 
@@ -336,6 +349,9 @@ object Detour {
 
     /** Resolve a short link URL to its full data. */
     suspend fun resolveShortLink(url: String): ShortLinkResponse?
+
+    /** Set the app's user identifier sent with later requests; null removes it. */
+    fun setUserId(userId: String?)
 }
 ```
 

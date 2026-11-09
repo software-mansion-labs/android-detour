@@ -3,7 +3,8 @@ package com.swmansion.detour.analytics
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.api.AnalyticsApiClient
-import com.swmansion.detour.storage.DetourStorage
+import com.swmansion.detour.identity.UserIdStore
+import com.swmansion.detour.storage.InstallStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,7 +26,8 @@ object DetourAnalytics {
     private var isInitialized = false
 
     private lateinit var apiClient: AnalyticsApiClient
-    private lateinit var deviceIdProvider: DeviceIdProvider
+    private lateinit var installStore: InstallStore
+    private lateinit var userIdStore: UserIdStore
 
     @Volatile
     private var appOpenFired = false
@@ -33,9 +35,10 @@ object DetourAnalytics {
     /**
      * Internal — called from [com.swmansion.detour.Detour.initialize].
      */
-    internal fun initialize(config: DetourConfig, storage: DetourStorage) {
+    internal fun initialize(config: DetourConfig, installStore: InstallStore, userIdStore: UserIdStore) {
         apiClient = AnalyticsApiClient(config)
-        deviceIdProvider = DeviceIdProvider(storage)
+        this.installStore = installStore
+        this.userIdStore = userIdStore
         isInitialized = true
     }
 
@@ -55,8 +58,7 @@ object DetourAnalytics {
 
         scope.launch {
             try {
-                val deviceId = deviceIdProvider.getDeviceId()
-                apiClient.sendEvent(eventName.eventName, data, deviceId)
+                apiClient.sendEvent(eventName.eventName, data, installStore.getDeviceId(), userIdStore.current())
             } catch (e: Exception) {
                 Log.w(TAG, "[Detour:ANALYTICS] logEvent failed", e)
             }
@@ -77,8 +79,7 @@ object DetourAnalytics {
 
         scope.launch {
             try {
-                val deviceId = deviceIdProvider.getDeviceId()
-                apiClient.sendRetentionEvent(eventName, deviceId)
+                apiClient.sendRetentionEvent(eventName, installStore.getDeviceId(), userIdStore.current())
             } catch (e: Exception) {
                 Log.w(TAG, "[Detour:ANALYTICS] logRetention failed", e)
             }

@@ -45,7 +45,13 @@ data class SignalMatchRequest(
     val timestamp: Long,
     
     @SerializedName("pastedLink")
-    val pastedLink: String? = null
+    val pastedLink: String? = null,
+
+    @SerializedName("device_id")
+    val deviceId: String? = null,
+
+    @SerializedName("user_id")
+    val userId: String? = null
 ) : MatchRequest
 
 /**
@@ -53,7 +59,13 @@ data class SignalMatchRequest(
  */
 data class DirectMatchRequest(
     @SerializedName("clickId")
-    val clickId: String
+    val clickId: String,
+
+    @SerializedName("device_id")
+    val deviceId: String? = null,
+
+    @SerializedName("user_id")
+    val userId: String? = null
 ) : MatchRequest
 
 /**

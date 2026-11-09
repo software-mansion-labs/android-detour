@@ -29,8 +29,9 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
      * @param eventName Name of the event
      * @param data Optional event data
      * @param deviceId Persistent device identifier
+     * @param userId The app's user identifier, if set
      */
-    suspend fun sendEvent(eventName: String, data: Any?, deviceId: String) =
+    suspend fun sendEvent(eventName: String, data: Any?, deviceId: String, userId: String?) =
         withContext(Dispatchers.IO) {
             val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_EVENT, config) ?: return@withContext
             try {
@@ -40,6 +41,7 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
                     put("timestamp", isoFormat.format(Date()))
                     put("platform", "android")
                     put("device_id", deviceId)
+                    if (userId != null) put("user_id", userId)
                 }
 
                 val json = HttpClient.gson.toJson(payload)
@@ -69,17 +71,19 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
      *
      * @param eventName Name of the retention event
      * @param deviceId Persistent device identifier
+     * @param userId The app's user identifier, if set
      */
-    suspend fun sendRetentionEvent(eventName: String, deviceId: String) =
+    suspend fun sendRetentionEvent(eventName: String, deviceId: String, userId: String?) =
         withContext(Dispatchers.IO) {
             val url = DetourEndpoints.url(DetourEndpoint.ANALYTICS_RETENTION, config) ?: return@withContext
             try {
-                val payload = mapOf(
-                    "event_name" to eventName,
-                    "timestamp" to isoFormat.format(Date()),
-                    "platform" to "android",
-                    "device_id" to deviceId
-                )
+                val payload = buildMap<String, Any> {
+                    put("event_name", eventName)
+                    put("timestamp", isoFormat.format(Date()))
+                    put("platform", "android")
+                    put("device_id", deviceId)
+                    if (userId != null) put("user_id", userId)
+                }
 
                 val json = HttpClient.gson.toJson(payload)
                 val requestBody = json.toRequestBody(HttpClient.JSON)
