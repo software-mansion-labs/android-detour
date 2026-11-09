@@ -211,7 +211,9 @@ DetourAnalytics.logRetention("week_1")
 
 </details>
 
-To link events to your own user account, pass your user identifier after the user signs in, and `null` after sign-out. Do not pass an e-mail address or a phone number.
+To link events to your own user account, pass your user identifier after the user signs in, and `null` after sign-out. A stable account ID: the same for the user on every install, never a guest or anonymous ID. Do not pass an e-mail address or a phone number.
+
+The value must have 1 to 256 characters; any other value is dropped with a warning and clears the stored one. `DetourConfig.userIdValidator` checks every `setUserId` value and the stored value at `initialize`; returning `false` drops the value and clears the stored one.
 
 ```kotlin
 Detour.setUserId("u_12345")
@@ -268,7 +270,7 @@ data class DetourConfig(
     /** Detour API host for tests and non-production environments (default: null = production Detour API). */
     val baseUrl: String? = null,
 
-    /** Check for setUserId values; returning false drops the value and clears the stored one (default: null). */
+    /** Checks every setUserId value and the stored value at initialize; false drops the value and clears the stored one (default: null). */
     val userIdValidator: ((String) -> Boolean)? = null,
 
     /** Turns on attribution mode (default: null = core SDK). */

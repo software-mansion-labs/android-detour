@@ -22,7 +22,8 @@ class InstallStoreTest {
 
     private val legacy = InMemoryStorage()
 
-    private fun store(dir: File = folder.root) = InstallStore(dir, legacy)
+    private fun store(dir: File = folder.root, isAppUpdate: Boolean? = true) =
+        InstallStore(dir, legacy) { isAppUpdate }
 
     @Test
     fun `device id survives relaunch but not reinstall`() = runTest {
@@ -56,6 +57,30 @@ class InstallStoreTest {
         assertNull(legacy.getItem(StorageKeys.DEVICE_ID))
         assertNull(legacy.getItem(StorageKeys.FIRST_ENTRANCE_FLAG))
         assertEquals(store.getDeviceId(), store().getDeviceId())
+    }
+
+    @Test
+    fun `DetourStorage restored on a fresh install starts a new install`() = runTest {
+        legacy.setItem(StorageKeys.DEVICE_ID, "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01")
+        legacy.setItem(StorageKeys.FIRST_ENTRANCE_FLAG, "true")
+
+        val store = store(isAppUpdate = false)
+
+        assertNotEquals("3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01", store.getDeviceId())
+        assertTrue(store.isFirstLaunch())
+        assertNull(legacy.getItem(StorageKeys.DEVICE_ID))
+        assertNull(legacy.getItem(StorageKeys.FIRST_ENTRANCE_FLAG))
+    }
+
+    @Test
+    fun `unknown install times keep DetourStorage values`() = runTest {
+        legacy.setItem(StorageKeys.DEVICE_ID, "3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01")
+        legacy.setItem(StorageKeys.FIRST_ENTRANCE_FLAG, "true")
+
+        val store = store(isAppUpdate = null)
+
+        assertEquals("3f2b8c1e-9d4a-4c55-8f0e-2a6b7c8d9e01", store.getDeviceId())
+        assertFalse(store.isFirstLaunch())
     }
 
     @Test
