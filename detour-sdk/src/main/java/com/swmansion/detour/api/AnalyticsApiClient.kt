@@ -2,6 +2,7 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import com.google.gson.JsonParser
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.analytics.AnalyticsRequest
 import com.swmansion.detour.analytics.SessionManager
@@ -34,7 +35,8 @@ internal class AnalyticsApiClient(
 
             HttpClient.okHttp.newCall(httpRequest).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Log.w(TAG, "[Detour:ANALYTICS] ${endpoint.path} send failed: ${response.code}")
+                    val error = apiError(runCatching { response.body?.string() }.getOrNull())?.let { " $it" }.orEmpty()
+                    Log.w(TAG, "[Detour:ANALYTICS] ${endpoint.path} send failed: ${response.code}$error")
                 }
             }
         } catch (e: Exception) {
@@ -44,6 +46,19 @@ internal class AnalyticsApiClient(
 
     companion object {
         private const val TAG = "AnalyticsApiClient"
+
+        /**
+         * `{ "error": ..., "code": ... }` from a failed response, as `error (code)`.
+         * Read with JsonParser, not a data class, so R8 renaming fields in the app cannot break it.
+         */
+        @VisibleForTesting
+        internal fun apiError(body: String?): String? {
+            val json = body?.let { runCatching { JsonParser.parseString(it).asJsonObject }.getOrNull() } ?: return null
+            fun field(name: String) = json[name]?.takeIf { it.isJsonPrimitive }?.asString
+            val error = field("error")
+            val code = field("code")
+            return if (error != null && code != null) "$error ($code)" else error ?: code
+        }
 
         private fun endpointOf(request: AnalyticsRequest): DetourEndpoint = when (request) {
             is AnalyticsRequest.Event -> DetourEndpoint.ANALYTICS_EVENT

@@ -20,6 +20,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Public analytics API for the Detour SDK.
@@ -56,6 +58,8 @@ object DetourAnalytics {
     private var appOpenFired = false
 
     internal val sessionManager = SessionManager()
+
+    private val revenueWarnedEvents = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     /**
      * Internal — called from [com.swmansion.detour.Detour.configure].
@@ -98,11 +102,11 @@ object DetourAnalytics {
     @JvmStatic
     @JvmOverloads
     fun logEvent(eventName: DetourEventNames, data: Any? = null) {
-        if (eventName == DetourEventNames.Purchase && (data as? Map<*, *>)?.containsKey("revenue") == true) {
+        if (takeRevenueWarning(eventName.eventName, data)) {
             Log.w(
                 TAG,
-                "[Detour:DEPRECATION] Revenue in logEvent(Purchase) is deprecated and not counted as revenue. " +
-                    "Use logConversion instead."
+                "[Detour:DEPRECATION] Revenue in logEvent(${eventName.eventName}) is not counted as revenue. " +
+                    "Use DetourAnalytics.logConversion instead."
             )
         }
         send(AnalyticsRequest.Event(eventName.eventName, data, System.currentTimeMillis()))
@@ -123,8 +127,17 @@ object DetourAnalytics {
      */
     @JvmStatic
     fun logConversion(conversion: DetourConversion) {
+        val error = conversion.validationError()
+        if (error != null) {
+            Log.w(TAG, "[Detour:ANALYTICS] logConversion dropped: $error.")
+            return
+        }
         send(AnalyticsRequest.Conversion(conversion, System.currentTimeMillis()))
     }
+
+    /** Once per event name per process, so frequent events like ad impressions do not flood the log. */
+    internal fun takeRevenueWarning(eventName: String, data: Any?): Boolean =
+        (data as? Map<*, *>)?.containsKey("revenue") == true && revenueWarnedEvents.add(eventName)
 
     private fun send(request: AnalyticsRequest) {
         if (!isStarted) {
