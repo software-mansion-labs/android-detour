@@ -315,18 +315,22 @@ object Detour {
         installStore.markFirstLaunchHandled()
         Log.d(TAG, "First launch detected, processing deferred link")
 
-        // The referrer goes with both match requests; a click ID in it enables direct matching.
+        // The referrer goes with both match requests; a UUID click ID in it enables direct matching.
         val referrer = installReferrerHelper.getReferrerDetails()
         val clickId = referrer?.clickId
 
         val deviceId = installStore.getDeviceId()
         val userId = userIdStore.current()
 
-        val link: String? = if (clickId != null) {
+        val link: String? = if (clickId != null && InstallReferrerHelper.isDirectMatchClickId(clickId)) {
             Log.d(TAG, "Using direct matching with click_id")
             apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer))
         } else {
-            Log.d(TAG, "The click_id not found, using signal-based matching")
+            if (clickId == null) {
+                Log.d(TAG, "The click_id not found, using signal-based matching")
+            } else {
+                Log.d(TAG, "The click_id is not a UUID, using signal-based matching")
+            }
             apiClient.matchLink(
                 signalCollector.collectSignals().copy(deviceId = deviceId, userId = userId, installReferrer = referrer)
             )
