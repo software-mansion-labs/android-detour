@@ -8,6 +8,7 @@ import com.swmansion.detour.analytics.RevenueType
 import com.swmansion.detour.analytics.SessionManager
 import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.DetourPurpose
+import com.swmansion.detour.consent.GateDecision
 import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
@@ -80,15 +81,21 @@ class DetourEndpointsTest {
     }
 
     @Test
-    fun `requests report the core package unless attribution is set`() {
-        fun packageHeader(config: DetourConfig) =
-            Request.Builder().url("https://api.example.com").detourHeaders(config).build().header("X-SDK-Package")
+    fun `requests report mmp only with attribution set and the attribution gate open`() = runTest {
+        suspend fun packageHeader(config: DetourConfig, decision: suspend () -> GateDecision): String? {
+            HttpClient.attributionDecision = decision
+            return Request.Builder().url("https://api.example.com").detourHeaders(config).build().header("X-SDK-Package")
+        }
+        val attribution = DetourConfig.Builder("key", "app").attribution(DetourAttributionConfig()).build()
 
-        assertEquals("core", packageHeader(config(null)))
-        assertEquals(
-            "mmp",
-            packageHeader(DetourConfig.Builder("key", "app").attribution(DetourAttributionConfig()).build())
-        )
+        try {
+            assertEquals("core", packageHeader(config(null)) { GateDecision.SEND })
+            assertEquals("mmp", packageHeader(attribution) { GateDecision.SEND })
+            assertEquals("core", packageHeader(attribution) { GateDecision.WAIT })
+            assertEquals("core", packageHeader(attribution) { error("storage failed") })
+        } finally {
+            HttpClient.attributionDecision = { GateDecision.DROP }
+        }
     }
 
     @Test

@@ -8,9 +8,12 @@ import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.api.DetourEndpoints
+import com.swmansion.detour.api.HttpClient
 import com.swmansion.detour.api.SdkApiClient
+import com.swmansion.detour.consent.ConsentGate
 import com.swmansion.detour.consent.ConsentStore
 import com.swmansion.detour.consent.DetourConsent
+import com.swmansion.detour.consent.DetourPurpose
 import com.swmansion.detour.consent.KillSwitchReporter
 import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identity.UserIdStore
@@ -252,6 +255,15 @@ object Detour {
         this.sdkConfigStore = SdkConfigStore(storage, config.appId)
         this.killSwitchReporter = KillSwitchReporter(installStore, scope) { enabled, atMs ->
             sdkApiClient.sendKillSwitch(enabled, atMs, installStore.getDeviceId())
+        }
+        HttpClient.attributionDecision = {
+            ConsentGate.decide(
+                DetourPurpose.ATTRIBUTION,
+                isEnabled(),
+                consentStore.passedThisLaunch,
+                consentStore.stored(),
+                sdkConfigStore.current().gateDefault(DetourPurpose.ATTRIBUTION),
+            )
         }
         refreshSdkConfig()
 

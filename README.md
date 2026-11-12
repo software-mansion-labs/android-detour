@@ -317,7 +317,23 @@ data class DetourConfig(
 
 `baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.configure` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
 
-`attribution = DetourAttributionConfig()` turns on attribution mode: requests tell the Detour backend that they come from an app that uses attribution, so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan, consent and each network's settings). It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+`attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch, for example `mapOf(DetourPurpose.ATTRIBUTION to true)`. With both, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan and each network's settings). Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+
+An install is attributed from the deferred-matching request on its first launch. With the default `autoStart = true` that request goes out in `configure`, before your consent prompt, so it goes as `core` and the install is not attributed. With attribution:
+
+1. Pass `autoStart = false` to `configure`.
+2. On every launch, call `Detour.setConsent` as soon as your consent platform has the choice, before you log events or conversions.
+3. Then call `Detour.start()`.
+
+```kotlin
+Detour.configure(this, config, autoStart = false)
+
+// after your consent platform has the user's choice
+Detour.setConsent(DetourConsent(purposes = mapOf(DetourPurpose.ANALYTICS to true, DetourPurpose.ATTRIBUTION to true)))
+Detour.start()
+```
+
+The deferred link then waits for the consent prompt. Links the user taps are routed at once either way.
 
 </details>
 
