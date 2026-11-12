@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Detour.initialize(this, detourDelegate.config)
+        Detour.configure(this, detourDelegate.config)
         setupButtons()
 
         // Process links (Universal + Scheme + Deferred)

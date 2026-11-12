@@ -14,7 +14,7 @@ import com.swmansion.detour.storage.DetourStorage
  * @property baseUrl Detour API host for tests and non-production environments (https only).
  *                   `null` uses the production Detour API.
  * @property userIdValidator Checks every [Detour.setUserId] value and the stored value at
- *                   [Detour.initialize]; returning `false` drops the value and clears the stored one.
+ *                   [Detour.configure]; returning `false` drops the value and clears the stored one.
  *                   Use it to reject values that must not leave the device, such as e-mail addresses
  *                   or phone numbers.
  * @property attribution Turns on attribution mode (see [DetourAttributionConfig]). `null` keeps the core SDK.

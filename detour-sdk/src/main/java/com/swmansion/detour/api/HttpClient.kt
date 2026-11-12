@@ -1,8 +1,11 @@
 package com.swmansion.detour.api
 
+import android.util.Log
 import com.google.gson.Gson
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.FlutterSdkHeaderResolver
+import com.swmansion.detour.consent.GateDecision
+import kotlinx.coroutines.CancellationException
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -33,11 +36,30 @@ internal object HttpClient {
     val gson: Gson = Gson()
 
     val JSON: MediaType = "application/json; charset=utf-8".toMediaType()
+
+    /** The consent gate for attribution; set by [com.swmansion.detour.Detour.configure]. */
+    @Volatile
+    var attributionDecision: suspend () -> GateDecision = { GateDecision.DROP }
 }
 
-internal fun Request.Builder.detourHeaders(config: DetourConfig): Request.Builder = this
+// The backend attributes every mmp request, so a request goes as core until the attribution
+// gate lets it through. It never waits for consent and never fails the request: a deep link must
+// not be held back, so a gate that cannot be read counts as closed.
+private suspend fun sdkPackage(config: DetourConfig): String {
+    if (config.attribution == null) return "core"
+    return try {
+        if (HttpClient.attributionDecision() == GateDecision.SEND) "mmp" else "core"
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w("HttpClient", "[Detour:CONSENT] Attribution consent could not be read; the request goes as core.", e)
+        "core"
+    }
+}
+
+internal suspend fun Request.Builder.detourHeaders(config: DetourConfig): Request.Builder = this
     .addHeader("Content-Type", "application/json")
     .addHeader("Authorization", "Bearer ${config.apiKey}")
     .addHeader("X-App-ID", config.appId)
     .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
-    .addHeader("X-SDK-Package", if (config.attribution != null) "mmp" else "core")
+    .addHeader("X-SDK-Package", sdkPackage(config))

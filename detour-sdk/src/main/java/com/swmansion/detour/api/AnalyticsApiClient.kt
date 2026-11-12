@@ -6,14 +6,11 @@ import com.google.gson.JsonParser
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.analytics.AnalyticsRequest
 import com.swmansion.detour.analytics.SessionManager
+import com.swmansion.detour.utils.IsoTimestamp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * API client for Detour analytics endpoints.
@@ -70,33 +67,28 @@ internal class AnalyticsApiClient(
             is AnalyticsRequest.Conversion -> DetourEndpoint.ANALYTICS_CONVERSION
         }
 
-        private fun timestamp(atMs: Long = System.currentTimeMillis()): String =
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                .format(Date(atMs))
-
         private fun fieldsOf(request: AnalyticsRequest): Map<String, Any?> = when (request) {
             is AnalyticsRequest.Event -> mapOf(
                 "event_name" to request.name,
                 "data" to request.data,
-                "timestamp" to timestamp(),
+                "timestamp" to IsoTimestamp.format(request.atMs),
                 "platform" to "android",
             )
             is AnalyticsRequest.Retention -> mapOf(
                 "event_name" to request.name,
-                "timestamp" to timestamp(),
+                "timestamp" to IsoTimestamp.format(request.atMs),
                 "platform" to "android",
             )
             is AnalyticsRequest.Session -> when (val event = request.event) {
                 is SessionManager.Event.Start -> mapOf(
                     "type" to "start",
                     "session_id" to event.sessionId,
-                    "timestamp" to timestamp(event.atMs),
+                    "timestamp" to IsoTimestamp.format(event.atMs),
                 )
                 is SessionManager.Event.End -> mapOf(
                     "type" to "end",
                     "session_id" to event.sessionId,
-                    "timestamp" to timestamp(event.atMs),
+                    "timestamp" to IsoTimestamp.format(event.atMs),
                     "duration_ms" to event.durationMs,
                 )
             }
@@ -110,7 +102,7 @@ internal class AnalyticsApiClient(
                     "product_id" to productId,
                     "quantity" to quantity,
                     "transaction_id" to transactionId,
-                    "timestamp" to timestamp(request.atMs),
+                    "timestamp" to IsoTimestamp.format(request.atMs),
                 )
             }
         }

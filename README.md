@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        Detour.initialize(this, detourDelegate.config)
+        Detour.configure(this, detourDelegate.config)
         detourDelegate.onCreate(intent)
     }
 
@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity() {
             appId = "<REPLACE_WITH_APP_ID_FROM_PLATFORM>",
             apiKey = "<REPLACE_WITH_YOUR_API_KEY>"
         )
-        Detour.initialize(this, config)
+        Detour.configure(this, config)
 
         lifecycleScope.launch {
             val result = Detour.processLink(intent)
@@ -132,6 +132,41 @@ class MainActivity : AppCompatActivity() {
 ```
 
 </details>
+
+### Starting after consent
+
+`configure` starts the SDK right away. If your app collects consent first, pass `autoStart = false`: the SDK is set up, and `start()` begins analytics, sessions and deferred link matching. Links the user taps are routed and counted before `start()`: for each one the SDK sends the link, app version, OS version and device model, because your plan's click limit applies to it. `getDeferredLink()` waits until `start()` runs.
+
+```kotlin
+Detour.configure(this, config, autoStart = false)
+
+// after your consent platform has the user's choice
+Detour.start()
+```
+
+`Detour.initialize(context, config)` still works and is deprecated; it is the same as `Detour.configure(context, config)`.
+
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.ANALYTICS` and others), and a purpose missing from the map is not granted. Each call replaces the previous consent, so pass every purpose in one call. Calling it on every launch is cheap: a choice the Detour server already has is not sent again. Leave `timestampMs` out unless your consent platform gives the time of the choice; without it the SDK uses the time it first sends the choice. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start()` only after it.
+
+```kotlin
+Detour.setConsent(
+    DetourConsent(
+        purposes = mapOf(
+            DetourPurpose.ANALYTICS to true,
+            DetourPurpose.AD_NETWORK_SHARING to false,
+        ),
+        consentTextRef = "cmp-v12",
+        source = "cmp",
+    ),
+    consentText = noticeText,
+)
+```
+
+To turn the SDK off for a user, call `setEnabled(false)`. It stays off across launches until `setEnabled(true)`. While off, the SDK sends nothing (analytics, sessions, conversions, consent, matching by device signals); links the user taps are still routed, and a click ID from the Play install referrer still matches the deferred link without the device ID. Withdrawing consent for a purpose stops only that purpose.
+
+```kotlin
+Detour.setEnabled(false)
+```
 
 ### Controlling which links Detour processes
 
@@ -196,7 +231,7 @@ val config = DetourConfig(
 
 ## Analytics
 
-The SDK includes a built-in analytics module. `Detour.initialize()` automatically tracks app opens for retention. You can also log custom events using the predefined `DetourEventNames` enum:
+The SDK includes a built-in analytics module. `Detour.configure()` automatically tracks app opens for retention. You can also log custom events using the predefined `DetourEventNames` enum:
 
 <details>
 <summary>Analytics example</summary>
@@ -239,7 +274,7 @@ DetourAnalytics.logConversion(
 )
 ```
 
-Sessions are reported automatically after `Detour.initialize()`: the start and end of each use of the app with its duration, under a random session ID kept in memory only. More than 30 minutes in the background starts a new session.
+Sessions are reported automatically after `Detour.configure()`: the start and end of each use of the app with its duration, under a random session ID kept in memory only. More than 30 minutes in the background starts a new session.
 
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
@@ -272,7 +307,7 @@ data class DetourConfig(
     /** Detour API host for tests and non-production environments (default: null = production Detour API). */
     val baseUrl: String? = null,
 
-    /** Checks every setUserId value and the stored value at initialize; false drops the value and clears the stored one (default: null). */
+    /** Checks every setUserId value and the stored value at configure; false drops the value and clears the stored one (default: null). */
     val userIdValidator: ((String) -> Boolean)? = null,
 
     /** Turns on attribution mode (default: null = core SDK). */
@@ -280,9 +315,25 @@ data class DetourConfig(
 )
 ```
 
-`baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.initialize` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
+`baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.configure` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
 
-`attribution = DetourAttributionConfig()` turns on attribution mode: requests tell the Detour backend that they come from an app that uses attribution, so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan, consent and each network's settings). It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+`attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch, for example `mapOf(DetourPurpose.ATTRIBUTION to true)`. With both, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan and each network's settings). Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+
+An install is attributed from the deferred-matching request on its first launch. With the default `autoStart = true` that request goes out in `configure`, before your consent prompt, so it goes as `core` and the install is not attributed. With attribution:
+
+1. Pass `autoStart = false` to `configure`.
+2. On every launch, call `Detour.setConsent` as soon as your consent platform has the choice, before you log events or conversions.
+3. Then call `Detour.start()`.
+
+```kotlin
+Detour.configure(this, config, autoStart = false)
+
+// after your consent platform has the user's choice
+Detour.setConsent(DetourConsent(purposes = mapOf(DetourPurpose.ANALYTICS to true, DetourPurpose.ATTRIBUTION to true)))
+Detour.start()
+```
+
+The deferred link then waits for the consent prompt. Links the user taps are routed at once either way.
 
 </details>
 
@@ -363,7 +414,19 @@ interface DetourStorage {
 
 ```kotlin
 object Detour {
-    /** Initialize SDK — call once in Application.onCreate() or Activity.onCreate(). */
+    /** Set the SDK up — call once in Application.onCreate() or Activity.onCreate(). Starts it unless autoStart is false. */
+    fun configure(context: Context, config: DetourConfig, autoStart: Boolean = true)
+
+    /** Start analytics, sessions and deferred link matching after configure(autoStart = false). */
+    fun start()
+
+    /** Pass the user's choice per purpose; each call replaces the previous one. */
+    fun setConsent(consent: DetourConsent, consentText: String? = null)
+
+    /** Turn the SDK off (or back on) for this install; kept across launches. */
+    fun setEnabled(enabled: Boolean)
+
+    /** Deprecated: same as configure(context, config). */
     fun initialize(context: Context, config: DetourConfig)
 
     /** Process intent and extract deep link (App Link, scheme, or deferred). */

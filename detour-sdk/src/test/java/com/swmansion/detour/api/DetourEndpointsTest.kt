@@ -6,6 +6,9 @@ import com.swmansion.detour.analytics.AnalyticsRequest
 import com.swmansion.detour.analytics.DetourConversion
 import com.swmansion.detour.analytics.RevenueType
 import com.swmansion.detour.analytics.SessionManager
+import com.swmansion.detour.consent.DetourConsent
+import com.swmansion.detour.consent.DetourPurpose
+import com.swmansion.detour.consent.GateDecision
 import com.swmansion.detour.models.DirectMatchRequest
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
@@ -41,6 +44,9 @@ class DetourEndpointsTest {
             DetourEndpoint.ANALYTICS_RETENTION to "https://godetour.dev/api/analytics/retention",
             DetourEndpoint.ANALYTICS_SESSION to "https://godetour.dev/api/analytics/session",
             DetourEndpoint.ANALYTICS_CONVERSION to "https://godetour.dev/api/analytics/conversion",
+            DetourEndpoint.SDK_CONFIG to "https://godetour.dev/api/sdk/config",
+            DetourEndpoint.SDK_CONSENT to "https://godetour.dev/api/sdk/consent",
+            DetourEndpoint.SDK_DISABLE to "https://godetour.dev/api/sdk/disable",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -75,15 +81,21 @@ class DetourEndpointsTest {
     }
 
     @Test
-    fun `requests report the core package unless attribution is set`() {
-        fun packageHeader(config: DetourConfig) =
-            Request.Builder().url("https://api.example.com").detourHeaders(config).build().header("X-SDK-Package")
+    fun `requests report mmp only with attribution set and the attribution gate open`() = runTest {
+        suspend fun packageHeader(config: DetourConfig, decision: suspend () -> GateDecision): String? {
+            HttpClient.attributionDecision = decision
+            return Request.Builder().url("https://api.example.com").detourHeaders(config).build().header("X-SDK-Package")
+        }
+        val attribution = DetourConfig.Builder("key", "app").attribution(DetourAttributionConfig()).build()
 
-        assertEquals("core", packageHeader(config(null)))
-        assertEquals(
-            "mmp",
-            packageHeader(DetourConfig.Builder("key", "app").attribution(DetourAttributionConfig()).build())
-        )
+        try {
+            assertEquals("core", packageHeader(config(null)) { GateDecision.SEND })
+            assertEquals("mmp", packageHeader(attribution) { GateDecision.SEND })
+            assertEquals("core", packageHeader(attribution) { GateDecision.WAIT })
+            assertEquals("core", packageHeader(attribution) { error("storage failed") })
+        } finally {
+            HttpClient.attributionDecision = { GateDecision.DROP }
+        }
     }
 
     @Test
@@ -135,9 +147,12 @@ class ApiClientsBaseUrlTest {
         apiClient.matchLink(DirectMatchRequest(clickId = "click"))
         apiClient.resolveShortLink("https://app.godetour.link/abc")
         apiClient.sendUniversalLinkClick("https://app.godetour.link/abc")
+        SdkApiClient(config).fetchConfig(etag = null)
+        SdkApiClient(config).sendConsent(DetourConsent(mapOf(DetourPurpose.ANALYTICS to true)), null, "device", null)
+        SdkApiClient(config).sendKillSwitch(enabled = false, atMs = 0, deviceId = "device")
         listOf(
-            AnalyticsRequest.Event("test", null),
-            AnalyticsRequest.Retention("app_open"),
+            AnalyticsRequest.Event("test", null, 0),
+            AnalyticsRequest.Retention("app_open", 0),
             AnalyticsRequest.Session(SessionManager.Event.Start("8c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e", 0)),
             AnalyticsRequest.Conversion(DetourConversion("purchase", BigDecimal("4.99"), "USD", RevenueType.IAP), 0),
         ).forEach { analyticsClient.send(it, "device", null) }

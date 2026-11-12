@@ -7,4 +7,6 @@ internal object StorageKeys {
     const val FIRST_ENTRANCE_FLAG = "Detour_firstEntranceFlag"
     const val DEVICE_ID = "Detour_deviceId"
     const val USER_ID = "Detour_userId"
+    const val SDK_CONFIG = "Detour_sdkConfig"
+    const val CONSENT = "Detour_consent"
 }

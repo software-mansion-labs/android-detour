@@ -9,6 +9,11 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.api.AnalyticsApiClient
 import com.swmansion.detour.api.RequestContextProvider
+import com.swmansion.detour.consent.ConsentGate
+import com.swmansion.detour.consent.ConsentStore
+import com.swmansion.detour.consent.DetourPurpose
+import com.swmansion.detour.consent.GateDecision
+import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.storage.InstallStore
 import kotlinx.coroutines.CoroutineScope
@@ -33,9 +38,21 @@ object DetourAnalytics {
     @Volatile
     private var isInitialized = false
 
+    @Volatile
+    private var isStarted = false
+
     private lateinit var apiClient: AnalyticsApiClient
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
+    private lateinit var consentStore: ConsentStore
+    private lateinit var sdkConfigStore: SdkConfigStore
+    private lateinit var isEnabled: suspend () -> Boolean
+
+    private val waitingForConsent = mutableListOf<AnalyticsRequest>()
+
+    // PROVISIONAL: kept in memory and capped, so a closed gate the app never answers
+    // cannot grow without bound. The oldest requests (app_open, the session start) are kept.
+    private const val MAX_WAITING_FOR_CONSENT = 100
 
     @Volatile
     private var appOpenFired = false
@@ -45,19 +62,35 @@ object DetourAnalytics {
     private val revenueWarnedEvents = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     /**
-     * Internal — called from [com.swmansion.detour.Detour.initialize].
+     * Internal — called from [com.swmansion.detour.Detour.configure].
      */
     internal fun initialize(
         config: DetourConfig,
         requestContext: RequestContextProvider,
         installStore: InstallStore,
         userIdStore: UserIdStore,
+        consentStore: ConsentStore,
+        sdkConfigStore: SdkConfigStore,
+        isEnabled: suspend () -> Boolean,
     ) {
         apiClient = AnalyticsApiClient(config, requestContext)
         this.installStore = installStore
         this.userIdStore = userIdStore
+        this.consentStore = consentStore
+        this.sdkConfigStore = sdkConfigStore
+        this.isEnabled = isEnabled
         isInitialized = true
+    }
+
+    /**
+     * Internal — called from [com.swmansion.detour.Detour.start].
+     */
+    @Synchronized
+    internal fun start() {
+        if (isStarted) return
+        isStarted = true
         startSessions()
+        logAppOpenIfNeeded()
     }
 
     /**
@@ -76,7 +109,7 @@ object DetourAnalytics {
                     "Use DetourAnalytics.logConversion instead."
             )
         }
-        send(AnalyticsRequest.Event(eventName.eventName, data))
+        send(AnalyticsRequest.Event(eventName.eventName, data, System.currentTimeMillis()))
     }
 
     /**
@@ -86,7 +119,7 @@ object DetourAnalytics {
      */
     @JvmStatic
     fun logRetention(eventName: String) {
-        send(AnalyticsRequest.Retention(eventName))
+        send(AnalyticsRequest.Retention(eventName, System.currentTimeMillis()))
     }
 
     /**
@@ -107,17 +140,43 @@ object DetourAnalytics {
         (data as? Map<*, *>)?.containsKey("revenue") == true && revenueWarnedEvents.add(eventName)
 
     private fun send(request: AnalyticsRequest) {
-        if (!isInitialized) {
-            Log.w(TAG, "[Detour:ANALYTICS] Analytics not initialized — call Detour.initialize() first")
+        if (!isStarted) {
+            Log.w(TAG, "[Detour:ANALYTICS] Analytics not started — call Detour.start() (or Detour.configure()) first")
             return
         }
 
-        scope.launch {
-            try {
-                apiClient.send(request, installStore.getDeviceId(), userIdStore.current())
-            } catch (e: Exception) {
-                Log.w(TAG, "[Detour:ANALYTICS] Sending ${request::class.simpleName} failed", e)
+        scope.launch { deliver(request) }
+    }
+
+    /** Sends the requests that waited for consent once a new consent or config decides them. */
+    internal fun reevaluateWaiting() {
+        val waiting = synchronized(waitingForConsent) {
+            waitingForConsent.toList().also { waitingForConsent.clear() }
+        }
+        waiting.forEach { scope.launch { deliver(it) } }
+    }
+
+    private suspend fun deliver(request: AnalyticsRequest) {
+        val gateDefault = sdkConfigStore.current().gateDefault(DetourPurpose.ANALYTICS)
+        val storedConsent = consentStore.stored()
+        val enabled = isEnabled()
+        // Decided under the lock, so a consent passed meanwhile either decides this request
+        // or finds it in the waiting list.
+        val decision = synchronized(waitingForConsent) {
+            val decision = ConsentGate.decide(
+                DetourPurpose.ANALYTICS, enabled, consentStore.passedThisLaunch, storedConsent, gateDefault
+            )
+            if (decision == GateDecision.WAIT && waitingForConsent.size < MAX_WAITING_FOR_CONSENT) {
+                waitingForConsent.add(request)
             }
+            decision
+        }
+        if (decision != GateDecision.SEND) return
+
+        try {
+            apiClient.send(request, installStore.getDeviceId(), userIdStore.current())
+        } catch (e: Exception) {
+            Log.w(TAG, "[Detour:ANALYTICS] Sending ${request::class.simpleName} failed", e)
         }
     }
 
@@ -137,7 +196,7 @@ object DetourAnalytics {
      * Internal — fires an `app_open` retention event once per session.
      * Mirrors the RN SDK's `useAppOpenRetention`.
      */
-    internal fun logAppOpenIfNeeded() {
+    private fun logAppOpenIfNeeded() {
         if (appOpenFired) return
         appOpenFired = true
         logRetention("app_open")
