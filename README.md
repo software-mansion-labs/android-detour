@@ -133,12 +133,18 @@ class MainActivity : AppCompatActivity() {
 
 </details>
 
-### Starting after consent
+### Starting only after consent
 
-`configure` starts the SDK right away. If your app collects consent first, pass `autoStart = false`: the SDK is set up, and `start()` begins analytics, sessions and deferred link matching. Links the user taps are routed and counted before `start()`: for each one the SDK sends the link, app version, OS version and device model, because your plan's click limit applies to it. `getDeferredLink()` waits until `start()` runs.
+`configure` starts the SDK right away. To wait for consent, `setConsent` is usually enough: analytics follows the consent gate described below, and with attribution on the first deferred link match waits for the choice on `DetourPurpose.ATTRIBUTION`. Pass `autoStart = false` only if the law that applies to you requires consent before anything else leaves the device, deferred link matching included: the SDK is set up, and `start()` begins analytics, sessions and deferred link matching. Events and conversions you log before `start()` are kept in memory (up to 100) and sent after it, if consent to `DetourPurpose.ANALYTICS` allows. Links the user taps are routed and counted before `start()`: for each one the SDK sends the link, app version, OS version and device model, because your plan's click limit applies to it.
+
+When the deferred link waits for `start()` or for consent, `processLink` and `getDeferredLink` return only after it. If your app holds its UI until the initial link is handled, pass `onLinkProcessed`: it is called once, before the result or before the SDK starts waiting, so you can show your consent prompt. A deferred link found after that is still the return value. `DetourDelegate` takes the same `onLinkProcessed`.
 
 ```kotlin
 Detour.configure(this, config, autoStart = false)
+lifecycleScope.launch {
+    val result = Detour.processLink(intent, onLinkProcessed = { showFirstScreen() })
+    // handle result
+}
 
 // after your consent platform has the user's choice
 Detour.start()
@@ -146,7 +152,7 @@ Detour.start()
 
 `Detour.initialize(context, config)` still works and is deprecated; it is the same as `Detour.configure(context, config)`.
 
-To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.ANALYTICS` and others), and a purpose missing from the map is not granted. Each call replaces the previous consent, so pass every purpose in one call. Calling it on every launch is cheap: a choice the Detour server already has is not sent again. Leave `timestampMs` out unless your consent platform gives the time of the choice; without it the SDK uses the time it first sends the choice. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice: if your users' consent is needed for it, call `start()` only after it.
+To pass the user's choice per purpose, call `setConsent` on every launch once your consent platform has it. Purposes are strings (`DetourPurpose.ANALYTICS` and others), and a purpose missing from the map is not granted. Each call replaces the previous consent, so pass every purpose in one call. Calling it on every launch is cheap: a choice the Detour server already has is not sent again. Leave `timestampMs` out unless your consent platform gives the time of the choice; without it the SDK uses the time it first sends the choice. Detour sends analytics without a choice unless the Detour team has set your app to wait for one; a refusal stops analytics at once, also on the next launch before you call `setConsent` again. Deferred link matching does not depend on this choice, except with attribution on: then the first match waits for the choice on `DetourPurpose.ATTRIBUTION`. If your users' consent is needed for the match itself, call `start()` only after it.
 
 ```kotlin
 Detour.setConsent(
@@ -167,6 +173,52 @@ To turn the SDK off for a user, call `setEnabled(false)`. It stays off across la
 ```kotlin
 Detour.setEnabled(false)
 ```
+
+To check your consent integration, call `Detour.getStatus()`. It tells whether the SDK has started, whether it is on, whether `setConsent` was called on this launch, and for each purpose whether a request goes out now (`SEND`), waits for consent (`WAIT`) or is dropped (`DROP`). In debuggable builds the SDK also logs a warning once per launch when `setConsent` came but `start()` did not, when the purposes have no `analytics` key, when analytics waits because no consent was passed on this launch, and when a consent from an earlier launch was not passed again.
+
+```kotlin
+val status = Detour.getStatus()
+// DetourStatus(isStarted=true, isEnabled=true, hasConsentThisLaunch=true, purposes={analytics=SEND, attribution=DROP, ...})
+```
+
+### Consent at a glance
+
+Pass the user's choice on every launch, as soon as your consent platform has it:
+
+```kotlin
+// cmp is your consent platform.
+Detour.configure(this, DetourConfig(apiKey = apiKey, appId = appId, attribution = DetourAttributionConfig()))
+lifecycleScope.launch {
+    val result = Detour.processLink(intent, onLinkProcessed = { showFirstScreen() })
+    // handle result
+}
+
+cmp.onChoice { choice ->
+    Detour.setConsent(
+        DetourConsent(
+            purposes = mapOf(
+                DetourPurpose.ANALYTICS to choice.analytics,
+                DetourPurpose.ATTRIBUTION to choice.marketing,
+                DetourPurpose.AD_NETWORK_SHARING to choice.marketing,
+            ),
+            timestampMs = choice.decidedAtMs,
+        )
+    )
+}
+```
+
+The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.ANALYTICS` purpose, attribution data the `DetourPurpose.ATTRIBUTION` purpose. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
+
+| Request | Before `start()` | No choice yet, gate `closed` | Purpose refused | `setEnabled(false)` |
+| --- | --- | --- | --- | --- |
+| Deferred link match | Waits | Sent. With attribution on, waits for the choice on `DetourPurpose.ATTRIBUTION` | Sent (as `core` if `DetourPurpose.ATTRIBUTION` is refused) | Dropped. On Android a click ID from the Play install referrer still matches, without device data |
+| Click on a link the user taps | Sent | Sent | Sent | Dropped; the link is still routed |
+| `app_open` and sessions | Start with `start()` | Wait in memory (up to 100) | Dropped | Dropped |
+| Your events and conversions | Wait in memory (up to 100) | Wait in memory (up to 100) | Dropped | Dropped |
+| Attribution data (`X-SDK-Package: mmp`, Apple Search Ads token, SKAdNetwork values, Meta Install Referrer) | Wait | Wait | Not sent; requests go as `core` | Not sent |
+| Consent record from `setConsent` | Sent | Sent | Sent | Not sent |
+
+`start()` matters only if you turned the automatic start off (`autoStart = false`), which only a law that requires consent for deferred link matching asks for. Leave `attribution` out if you do not use attribution. Check what the SDK does at any moment with `Detour.getStatus()`.
 
 ### Controlling which links Detour processes
 
@@ -319,21 +371,13 @@ data class DetourConfig(
 
 `attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch, for example `mapOf(DetourPurpose.ATTRIBUTION to true)`. With both, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan and each network's settings). Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. Without `facebookAppId` it collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
 
-An install is attributed from the deferred-matching request on its first launch. With the default `autoStart = true` that request goes out in `configure`, before your consent prompt, so it goes as `core` and the install is not attributed. With attribution:
-
-1. Pass `autoStart = false` to `configure`.
-2. On every launch, call `Detour.setConsent` as soon as your consent platform has the choice, before you log events or conversions.
-3. Then call `Detour.start()`.
+An install is attributed from the deferred-matching request on its first launch. With attribution on, that request waits until your app passes the user's choice: after consent to `DetourPurpose.ATTRIBUTION` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. `processLink` returns only after the choice, so use `onLinkProcessed` to show your consent prompt (see Starting only after consent). On every launch, call `Detour.setConsent` as soon as your consent platform has the choice, before you log events or conversions:
 
 ```kotlin
-Detour.configure(this, config, autoStart = false)
-
-// after your consent platform has the user's choice
 Detour.setConsent(DetourConsent(purposes = mapOf(DetourPurpose.ANALYTICS to true, DetourPurpose.ATTRIBUTION to true)))
-Detour.start()
 ```
 
-The deferred link then waits for the consent prompt. Links the user taps are routed at once either way.
+Links the user taps are routed at once either way.
 
 To attribute installs from Meta ads (Facebook, Instagram, Audience Network), pass your Meta app ID: `DetourAttributionConfig(facebookAppId = "your-meta-app-id")`. The first deferred-matching request then carries the [Meta Install Referrer](https://developers.facebook.com/documentation/app-ads/meta-install-referrer), read from the Facebook, Instagram or Facebook Lite app on the device. It goes only with consent to `DetourPurpose.ATTRIBUTION`, still encrypted; the Detour backend decrypts it with your app's Install Referrer Decryption Key. Without one of those apps there is nothing to read. Add the apps to your `AndroidManifest.xml`, or the SDK cannot see them:
 
@@ -440,10 +484,13 @@ object Detour {
     fun initialize(context: Context, config: DetourConfig)
 
     /** Process intent and extract deep link (App Link, scheme, or deferred). */
-    suspend fun processLink(intent: Intent): LinkResult
+    suspend fun processLink(intent: Intent, onLinkProcessed: (() -> Unit)? = null): LinkResult
 
     /** Get deferred link only — ignores App Links and scheme links. */
-    suspend fun getDeferredLink(): LinkResult
+    suspend fun getDeferredLink(onLinkProcessed: (() -> Unit)? = null): LinkResult
+
+    /** What the SDK does now: started, enabled, consent on this launch, each purpose's decision. */
+    suspend fun getStatus(): DetourStatus
 
     /** Resolve a short link URL to its full data. */
     suspend fun resolveShortLink(url: String): ShortLinkResponse?
@@ -464,6 +511,7 @@ object Detour {
 class DetourDelegate(
     private val lifecycleOwner: LifecycleOwner,
     val config: DetourConfig,
+    private val onLinkProcessed: (() -> Unit)? = null,
     private val onLinkResult: (LinkResult) -> Unit
 ) {
     fun onCreate(intent: Intent)

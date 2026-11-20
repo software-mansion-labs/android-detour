@@ -31,10 +31,19 @@ class SdkConfigTest {
     """.trimIndent()
 
     @Test
-    fun `fallback opens only analytics`() = runTest {
-        val config = SdkConfigStore(storage, "app").current()
-        assertEquals(ConsentGateDefault.OPEN, config.gateDefault(DetourPurpose.ANALYTICS))
-        assertEquals(ConsentGateDefault.CLOSED, config.gateDefault(DetourPurpose.ATTRIBUTION))
+    fun `every gate is closed until the first fetch ends`() = runTest {
+        val store = SdkConfigStore(storage, "app")
+        assertFalse(store.isKnown())
+        assertEquals(ConsentGateDefault.CLOSED, store.current().gateDefault(DetourPurpose.ANALYTICS))
+    }
+
+    @Test
+    fun `a failed first fetch falls back to open analytics only`() = runTest {
+        val store = SdkConfigStore(storage, "app")
+        store.apply(FetchResult.Failed)
+        assertTrue(store.isKnown())
+        assertEquals(ConsentGateDefault.OPEN, store.current().gateDefault(DetourPurpose.ANALYTICS))
+        assertEquals(ConsentGateDefault.CLOSED, store.current().gateDefault(DetourPurpose.ATTRIBUTION))
     }
 
     @Test
@@ -51,7 +60,7 @@ class SdkConfigTest {
         SdkConfigStore(storage, "other").apply(FetchResult.Updated(body, "\"v1\""))
 
         val store = SdkConfigStore(storage, "app")
-        assertEquals(SdkConfig.FALLBACK, store.current())
+        assertFalse(store.isKnown())
         assertNull(store.etag())
     }
 

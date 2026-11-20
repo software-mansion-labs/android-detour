@@ -84,23 +84,32 @@ internal class SdkConfigStore(private val storage: DetourStorage, private val ap
     @Volatile
     private var config = SdkConfig.FALLBACK
 
+    @Volatile
+    private var hasFetchEnded = false
+
     /** The config as loaded so far: the fallback until the cache is read. */
     val latest: SdkConfig get() = config
 
-    /** Waits for the cached config on first use, so no request is decided by the fallback by mistake. */
-    suspend fun current(): SdkConfig {
+    /** False on a first launch until the first `sdk/config` fetch ends. */
+    suspend fun isKnown(): Boolean {
         load()
-        return config
+        return cached != null || hasFetchEnded
     }
+
+    // On a first launch nothing is cached, and the fallback opens analytics. Until the first fetch
+    // ends, every gate is closed instead, so an app the server keeps closed sends nothing before consent.
+    /** Waits for the cached config on first use, so no request is decided by the fallback by mistake. */
+    suspend fun current(): SdkConfig = if (isKnown()) config else UNTIL_FIRST_FETCH
 
     suspend fun etag(): String? {
         load()
         return cached?.etag
     }
 
-    /** Returns true when the config changed. */
+    /** Ends the first fetch whatever its result. Returns true when the config changed. */
     suspend fun apply(result: FetchResult): Boolean {
         load()
+        hasFetchEnded = true
         if (result !is FetchResult.Updated) return false
         val fetched = SdkConfig.fromJson(result.body) ?: return false
 
@@ -134,5 +143,6 @@ internal class SdkConfigStore(private val storage: DetourStorage, private val ap
 
     private companion object {
         const val TAG = "SdkConfigStore"
+        val UNTIL_FIRST_FETCH = SdkConfig.FALLBACK.copy(consentGateDefaults = emptyMap())
     }
 }
