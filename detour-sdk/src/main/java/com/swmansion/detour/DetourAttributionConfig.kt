@@ -5,7 +5,13 @@ package com.swmansion.detour
  * [com.swmansion.detour.consent.DetourPurpose.ATTRIBUTION] is passed on this launch, requests
  * report `X-SDK-Package: mmp`, so the Detour backend may attribute installs and conversions to ad
  * networks and send them postbacks. Whether it does is decided on the backend (the app's
- * attribution plan and the network's settings). It collects nothing beyond the core SDK; options
- * of the attribution features are added here.
+ * attribution plan and the network's settings).
+ *
+ * @property facebookAppId Your Meta (Facebook) app ID. With it, the first deferred-matching request
+ * carries the Meta Install Referrer read from the Facebook, Instagram or Facebook Lite app, so
+ * installs from Meta ads can be attributed. Your manifest also needs the `<queries>` entries from
+ * the README. `null` reads nothing.
  */
-class DetourAttributionConfig
+class DetourAttributionConfig @JvmOverloads constructor(
+    val facebookAppId: String? = null,
+)

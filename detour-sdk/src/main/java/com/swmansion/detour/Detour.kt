@@ -10,6 +10,7 @@ import com.swmansion.detour.api.RequestContextProvider
 import com.swmansion.detour.api.DetourEndpoints
 import com.swmansion.detour.api.HttpClient
 import com.swmansion.detour.api.SdkApiClient
+import com.swmansion.detour.api.requestSdkPackage
 import com.swmansion.detour.consent.ConsentGate
 import com.swmansion.detour.consent.ConsentStore
 import com.swmansion.detour.consent.DetourConsent
@@ -22,8 +23,10 @@ import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.models.LinkProcessingMode
 import com.swmansion.detour.models.LinkResult
 import com.swmansion.detour.models.LinkType
+import com.swmansion.detour.models.MetaInstallReferrer
 import com.swmansion.detour.models.ShortLinkResponse
 import com.swmansion.detour.referrer.InstallReferrerHelper
+import com.swmansion.detour.referrer.MetaInstallReferrerReader
 import com.swmansion.detour.signals.SignalCollector
 import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
@@ -83,6 +86,7 @@ object Detour {
     private lateinit var apiClient: DetourApiClient
     private lateinit var signalCollector: SignalCollector
     private lateinit var installReferrerHelper: InstallReferrerHelper
+    private lateinit var metaInstallReferrerReader: MetaInstallReferrerReader
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
     private lateinit var sdkApiClient: SdkApiClient
@@ -245,6 +249,7 @@ object Detour {
         this.apiClient = DetourApiClient(config, context.applicationContext, requestContext)
         this.signalCollector = SignalCollector(context.applicationContext)
         this.installReferrerHelper = InstallReferrerHelper(context.applicationContext)
+        this.metaInstallReferrerReader = MetaInstallReferrerReader(context.applicationContext)
         this.installStore = InstallStore(
             context.applicationContext.noBackupFilesDir,
             storage,
@@ -468,6 +473,14 @@ object Detour {
         )
     }
 
+    // One decision for the header and the Meta referrer: the referrer never goes out as core.
+    private suspend fun attributionFields(): Pair<String, MetaInstallReferrer?> {
+        val sdkPackage = requestSdkPackage(config)
+        val facebookAppId = config.attribution?.facebookAppId?.takeIf { it.isNotBlank() }
+        if (sdkPackage != "mmp" || facebookAppId == null) return sdkPackage to null
+        return sdkPackage to metaInstallReferrerReader.read(facebookAppId)
+    }
+
     /**
      * Process Deferred Deep Link via API.
      */
@@ -505,15 +518,23 @@ object Detour {
             apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
         } else if (clickId != null && isDirectMatch) {
             Log.d(TAG, "Using direct matching with click_id")
-            apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer))
+            val (sdkPackage, metaReferrer) = attributionFields()
+            apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer, metaReferrer), sdkPackage = sdkPackage)
         } else {
             if (clickId == null) {
                 Log.d(TAG, "The click_id not found, using signal-based matching")
             } else {
                 Log.d(TAG, "The click_id is not a UUID, using signal-based matching")
             }
+            val (sdkPackage, metaReferrer) = attributionFields()
             apiClient.matchLink(
-                signalCollector.collectSignals().copy(deviceId = deviceId, userId = userId, installReferrer = referrer)
+                signalCollector.collectSignals().copy(
+                    deviceId = deviceId,
+                    userId = userId,
+                    installReferrer = referrer,
+                    metaInstallReferrer = metaReferrer,
+                ),
+                sdkPackage = sdkPackage,
             )
         }
 

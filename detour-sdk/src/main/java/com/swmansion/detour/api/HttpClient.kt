@@ -45,7 +45,7 @@ internal object HttpClient {
 // The backend attributes every mmp request, so a request goes as core until the attribution
 // gate lets it through. It never waits for consent and never fails the request: a deep link must
 // not be held back, so a gate that cannot be read counts as closed.
-private suspend fun sdkPackage(config: DetourConfig): String {
+internal suspend fun requestSdkPackage(config: DetourConfig): String {
     if (config.attribution == null) return "core"
     return try {
         if (HttpClient.attributionDecision() == GateDecision.SEND) "mmp" else "core"
@@ -57,9 +57,10 @@ private suspend fun sdkPackage(config: DetourConfig): String {
     }
 }
 
-internal suspend fun Request.Builder.detourHeaders(config: DetourConfig): Request.Builder = this
+/** [sdkPackage] is the package already decided for this request; `null` decides it now. */
+internal suspend fun Request.Builder.detourHeaders(config: DetourConfig, sdkPackage: String? = null): Request.Builder = this
     .addHeader("Content-Type", "application/json")
     .addHeader("Authorization", "Bearer ${config.apiKey}")
     .addHeader("X-App-ID", config.appId)
     .addHeader("X-SDK", FlutterSdkHeaderResolver.sdkHeaderValue)
-    .addHeader("X-SDK-Package", sdkPackage(config))
+    .addHeader("X-SDK-Package", sdkPackage ?: requestSdkPackage(config))

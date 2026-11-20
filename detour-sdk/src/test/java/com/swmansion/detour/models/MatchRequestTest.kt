@@ -68,4 +68,14 @@ class MatchRequestTest {
         assertEquals("wifi", body["network_type"].asString)
         assertEquals("pl-PL", body["locale"].asJsonArray[0].asJsonObject["languageTag"].asString)
     }
+
+    @Test
+    fun `meta_install_referrer uses snake case and stays out when not read`() {
+        val meta = MetaInstallReferrer("encrypted", isClickThrough = false, actualTimestamp = 123, sourceApp = "facebook")
+        val body = json(DirectMatchRequest("c_1", metaInstallReferrer = meta))["meta_install_referrer"].asJsonObject
+
+        assertEquals(setOf("install_referrer", "is_ct", "actual_timestamp", "source_app"), body.keySet())
+        assertFalse(body["is_ct"].asBoolean)
+        assertFalse(json(DirectMatchRequest("c_1")).has("meta_install_referrer"))
+    }
 }
