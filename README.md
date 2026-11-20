@@ -181,6 +181,45 @@ val status = Detour.getStatus()
 // DetourStatus(isStarted=true, isEnabled=true, hasConsentThisLaunch=true, purposes={analytics=SEND, attribution=DROP, ...})
 ```
 
+### Consent at a glance
+
+Pass the user's choice on every launch, as soon as your consent platform has it:
+
+```kotlin
+// cmp is your consent platform.
+Detour.configure(this, DetourConfig(apiKey = apiKey, appId = appId, attribution = DetourAttributionConfig()))
+lifecycleScope.launch {
+    val result = Detour.processLink(intent, onLinkProcessed = { showFirstScreen() })
+    // handle result
+}
+
+cmp.onChoice { choice ->
+    Detour.setConsent(
+        DetourConsent(
+            purposes = mapOf(
+                DetourPurpose.ANALYTICS to choice.analytics,
+                DetourPurpose.ATTRIBUTION to choice.marketing,
+                DetourPurpose.AD_NETWORK_SHARING to choice.marketing,
+            ),
+            timestampMs = choice.decidedAtMs,
+        )
+    )
+}
+```
+
+The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.ANALYTICS` purpose, attribution data the `DetourPurpose.ATTRIBUTION` purpose. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
+
+| Request | Before `start()` | No choice yet, gate `closed` | Purpose refused | `setEnabled(false)` |
+| --- | --- | --- | --- | --- |
+| Deferred link match | Waits | Sent. With attribution on, waits for the choice on `DetourPurpose.ATTRIBUTION` | Sent (as `core` if `DetourPurpose.ATTRIBUTION` is refused) | Dropped. On Android a click ID from the Play install referrer still matches, without device data |
+| Click on a link the user taps | Sent | Sent | Sent | Dropped; the link is still routed |
+| `app_open` and sessions | Start with `start()` | Wait in memory (up to 100) | Dropped | Dropped |
+| Your events and conversions | Wait in memory (up to 100) | Wait in memory (up to 100) | Dropped | Dropped |
+| Attribution data (`X-SDK-Package: mmp`, Apple Search Ads token, SKAdNetwork values, Meta Install Referrer) | Wait | Wait | Not sent; requests go as `core` | Not sent |
+| Consent record from `setConsent` | Sent | Sent | Sent | Not sent |
+
+`start()` matters only if you turned the automatic start off (`autoStart = false`), which only a law that requires consent for deferred link matching asks for. Leave `attribution` out if you do not use attribution. Check what the SDK does at any moment with `Detour.getStatus()`.
+
 ### Controlling which links Detour processes
 
 Use `linkProcessingMode` to control which link sources the SDK handles:
