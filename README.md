@@ -317,7 +317,7 @@ data class DetourConfig(
 
 `baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.configure` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
 
-`attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch, for example `mapOf(DetourPurpose.ATTRIBUTION to true)`. With both, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan and each network's settings). Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. It collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+`attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch, for example `mapOf(DetourPurpose.ATTRIBUTION to true)`. With both, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan and each network's settings). Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. Without `facebookAppId` it collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
 
 An install is attributed from the deferred-matching request on its first launch. With the default `autoStart = true` that request goes out in `configure`, before your consent prompt, so it goes as `core` and the install is not attributed. With attribution:
 
@@ -334,6 +334,16 @@ Detour.start()
 ```
 
 The deferred link then waits for the consent prompt. Links the user taps are routed at once either way.
+
+To attribute installs from Meta ads (Facebook, Instagram, Audience Network), pass your Meta app ID: `DetourAttributionConfig(facebookAppId = "your-meta-app-id")`. The first deferred-matching request then carries the [Meta Install Referrer](https://developers.facebook.com/documentation/app-ads/meta-install-referrer), read from the Facebook, Instagram or Facebook Lite app on the device. It goes only with consent to `DetourPurpose.ATTRIBUTION`, still encrypted; the Detour backend decrypts it with your app's Install Referrer Decryption Key. Without one of those apps there is nothing to read. Add the apps to your `AndroidManifest.xml`, or the SDK cannot see them:
+
+```xml
+<queries>
+    <package android:name="com.facebook.katana" />
+    <package android:name="com.instagram.android" />
+    <package android:name="com.facebook.lite" />
+</queries>
+```
 
 </details>
 

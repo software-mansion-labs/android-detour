@@ -54,7 +54,10 @@ data class SignalMatchRequest(
     val userId: String? = null,
 
     @SerializedName("install_referrer")
-    val installReferrer: InstallReferrerDetails? = null
+    val installReferrer: InstallReferrerDetails? = null,
+
+    @SerializedName("meta_install_referrer")
+    val metaInstallReferrer: MetaInstallReferrer? = null
 ) : MatchRequest
 
 /**
@@ -71,7 +74,10 @@ data class DirectMatchRequest(
     val userId: String? = null,
 
     @SerializedName("install_referrer")
-    val installReferrer: InstallReferrerDetails? = null
+    val installReferrer: InstallReferrerDetails? = null,
+
+    @SerializedName("meta_install_referrer")
+    val metaInstallReferrer: MetaInstallReferrer? = null
 ) : MatchRequest
 
 /**
