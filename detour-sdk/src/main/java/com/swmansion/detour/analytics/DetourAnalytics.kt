@@ -9,8 +9,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.api.AnalyticsApiClient
 import com.swmansion.detour.api.RequestContextProvider
-import com.swmansion.detour.consent.ConsentGate
-import com.swmansion.detour.consent.ConsentStore
+import com.swmansion.detour.consent.ConsentDecider
+import com.swmansion.detour.consent.ConsentWarnings
 import com.swmansion.detour.consent.DetourPurpose
 import com.swmansion.detour.consent.GateDecision
 import com.swmansion.detour.consent.SdkConfigStore
@@ -44,9 +44,8 @@ object DetourAnalytics {
     private lateinit var apiClient: AnalyticsApiClient
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
-    private lateinit var consentStore: ConsentStore
+    private lateinit var consentDecider: ConsentDecider
     private lateinit var sdkConfigStore: SdkConfigStore
-    private lateinit var isEnabled: suspend () -> Boolean
 
     private val waitingForConsent = mutableListOf<AnalyticsRequest>()
 
@@ -69,16 +68,14 @@ object DetourAnalytics {
         requestContext: RequestContextProvider,
         installStore: InstallStore,
         userIdStore: UserIdStore,
-        consentStore: ConsentStore,
+        consentDecider: ConsentDecider,
         sdkConfigStore: SdkConfigStore,
-        isEnabled: suspend () -> Boolean,
     ) {
         apiClient = AnalyticsApiClient(config, requestContext)
         this.installStore = installStore
         this.userIdStore = userIdStore
-        this.consentStore = consentStore
+        this.consentDecider = consentDecider
         this.sdkConfigStore = sdkConfigStore
-        this.isEnabled = isEnabled
         isInitialized = true
     }
 
@@ -91,6 +88,7 @@ object DetourAnalytics {
         isStarted = true
         startSessions()
         logAppOpenIfNeeded()
+        reevaluateWaiting()
     }
 
     /**
@@ -140,9 +138,18 @@ object DetourAnalytics {
         (data as? Map<*, *>)?.containsKey("revenue") == true && revenueWarnedEvents.add(eventName)
 
     private fun send(request: AnalyticsRequest) {
-        if (!isStarted) {
-            Log.w(TAG, "[Detour:ANALYTICS] Analytics not started — call Detour.start() (or Detour.configure()) first")
+        if (!isInitialized) {
+            Log.w(TAG, "[Detour:ANALYTICS] Analytics not set up — call Detour.configure() first")
             return
+        }
+        // Requests logged before start() wait like those of a closed gate; the gate decides them after it.
+        if (!isStarted) {
+            synchronized(waitingForConsent) {
+                if (!isStarted) {
+                    if (waitingForConsent.size < MAX_WAITING_FOR_CONSENT) waitingForConsent.add(request)
+                    return
+                }
+            }
         }
 
         scope.launch { deliver(request) }
@@ -157,19 +164,21 @@ object DetourAnalytics {
     }
 
     private suspend fun deliver(request: AnalyticsRequest) {
-        val gateDefault = sdkConfigStore.current().gateDefault(DetourPurpose.ANALYTICS)
-        val storedConsent = consentStore.stored()
-        val enabled = isEnabled()
+        val inputs = consentDecider.read(DetourPurpose.ANALYTICS)
         // Decided under the lock, so a consent passed meanwhile either decides this request
         // or finds it in the waiting list.
         val decision = synchronized(waitingForConsent) {
-            val decision = ConsentGate.decide(
-                DetourPurpose.ANALYTICS, enabled, consentStore.passedThisLaunch, storedConsent, gateDefault
-            )
+            val decision = consentDecider.decide(DetourPurpose.ANALYTICS, inputs)
             if (decision == GateDecision.WAIT && waitingForConsent.size < MAX_WAITING_FOR_CONSENT) {
                 waitingForConsent.add(request)
             }
             decision
+        }
+        if (decision == GateDecision.WAIT && sdkConfigStore.isKnown()) {
+            ConsentWarnings.warnOnce(
+                "analyticsWaitsForConsent",
+                "Analytics waits: the Detour server keeps it closed until your app calls setConsent on this launch.",
+            )
         }
         if (decision != GateDecision.SEND) return
 
