@@ -21,7 +21,7 @@ data class DetourConsent @JvmOverloads constructor(
     val region: String? = null,
     val source: String? = null,
 ) {
-    /** The wire format of the API contract, also used to store the consent on the device. */
+    /** The wire format of the API, also used to store the consent on the device. */
     internal fun toWire(): Map<String, Any> = buildMap {
         put("purposes", purposes)
         timestampMs?.let { put("timestamp", IsoTimestamp.format(it)) }

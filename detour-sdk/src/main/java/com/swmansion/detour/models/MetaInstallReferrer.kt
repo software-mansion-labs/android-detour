@@ -2,7 +2,7 @@ package com.swmansion.detour.models
 
 import com.google.gson.annotations.SerializedName
 
-// PROVISIONAL: the field names until the contract defines meta_install_referrer.
+// PROVISIONAL: the field names of meta_install_referrer may still change.
 /**
  * Meta Install Referrer data sent as `meta_install_referrer` in the match request. The referrer
  * stays encrypted; the backend decrypts it with the app's key.
