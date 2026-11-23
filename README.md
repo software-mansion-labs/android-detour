@@ -200,6 +200,7 @@ cmp.onChoice { choice ->
                 DetourPurpose.ANALYTICS to choice.analytics,
                 DetourPurpose.ATTRIBUTION to choice.marketing,
                 DetourPurpose.AD_NETWORK_SHARING to choice.marketing,
+                DetourPurpose.AD_PERSONALIZATION to choice.marketing,
             ),
             timestampMs = choice.decidedAtMs,
         )
@@ -207,7 +208,7 @@ cmp.onChoice { choice ->
 }
 ```
 
-The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.ANALYTICS` purpose, attribution data the `DetourPurpose.ATTRIBUTION` purpose. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
+The table shows what happens to each request in each state. A request goes out only when every switch lets it through. Events and conversions follow the `DetourPurpose.ANALYTICS` purpose, attribution data the `DetourPurpose.ATTRIBUTION` purpose. The Detour backend sends data to ad networks only with consent to `DetourPurpose.AD_NETWORK_SHARING`, and to Google only with `DetourPurpose.AD_PERSONALIZATION` too, so pass both when your prompt asks for them. Without a choice on this launch, the gate from the Detour server config decides: `open` sends, `closed` waits. On a first launch every gate waits until that config arrives.
 
 | Request | Before `start()` | No choice yet, gate `closed` | Purpose refused | `setEnabled(false)` |
 | --- | --- | --- | --- | --- |
@@ -369,12 +370,23 @@ data class DetourConfig(
 
 `baseUrl` points the SDK at another Detour API host. Only `https` URLs are accepted; with any other scheme the SDK logs an error and sends no requests. When `baseUrl` is set, `Detour.configure` logs a warning so a test host does not end up in a production build. Java callers use `DetourConfig.Builder(...).baseUrl("https://...")`.
 
-`attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch, for example `mapOf(DetourPurpose.ATTRIBUTION to true)`. With both, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad networks and reported to them. The backend still decides whether to do it (the app's plan and each network's settings). Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. Without `facebookAppId` it collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+`attribution = DetourAttributionConfig()` turns on attribution mode. Then pass the user's consent with `setConsent` on every launch. With the option and consent to `DetourPurpose.ATTRIBUTION`, requests tell the Detour backend that the app uses attribution (`X-SDK-Package: mmp`), so installs and conversions can be attributed to ad network campaigns, if your plan includes attribution. Without the option, before consent and after a refusal, requests go as `core` and do not feed attribution. Without `facebookAppId` it collects no extra data on the device. Java callers use `DetourConfig.Builder(...).attribution(new DetourAttributionConfig())`.
+
+Sending data to ad networks needs one more purpose. The Detour backend sends an install or a conversion to a network set up for your app only with consent to `DetourPurpose.AD_NETWORK_SHARING`; Google also needs `DetourPurpose.AD_PERSONALIZATION`. Without it the install is still attributed in Detour, but nothing goes to the network. Your consent prompt has to say this: that data is shared with ad networks (for example Google and Unity) and used to personalize ads.
 
 An install is attributed from the deferred-matching request on its first launch. With attribution on, that request waits until your app passes the user's choice: after consent to `DetourPurpose.ATTRIBUTION` it goes as `mmp`, after a refusal as `core`; if the attribution gate is open for your app in the Detour server config, it goes at once. An app closed before the choice still matches on its next launch. `processLink` returns only after the choice, so use `onLinkProcessed` to show your consent prompt (see Starting only after consent). On every launch, call `Detour.setConsent` as soon as your consent platform has the choice, before you log events or conversions:
 
 ```kotlin
-Detour.setConsent(DetourConsent(purposes = mapOf(DetourPurpose.ANALYTICS to true, DetourPurpose.ATTRIBUTION to true)))
+Detour.setConsent(
+    DetourConsent(
+        purposes = mapOf(
+            DetourPurpose.ANALYTICS to true,
+            DetourPurpose.ATTRIBUTION to true,
+            DetourPurpose.AD_NETWORK_SHARING to true,
+            DetourPurpose.AD_PERSONALIZATION to true,
+        ),
+    ),
+)
 ```
 
 Links the user taps are routed at once either way.
