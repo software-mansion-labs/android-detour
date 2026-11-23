@@ -58,10 +58,13 @@ internal class UserIdStore(
             cached = userId
             loaded = true
         }
+        // Each write saves the latest value: the writes may run in any order, and an older one
+        // landing last would bring back a user ID removed at logout.
         scope.launch {
             mutex.withLock {
+                val latest = cached
                 runCatching {
-                    if (userId != null) storage.setItem(StorageKeys.USER_ID, userId)
+                    if (latest != null) storage.setItem(StorageKeys.USER_ID, latest)
                     else storage.removeItem(StorageKeys.USER_ID)
                 }.onFailure { Log.w(TAG, "[Detour:IDENTITY] Failed to save user ID.", it) }
             }
