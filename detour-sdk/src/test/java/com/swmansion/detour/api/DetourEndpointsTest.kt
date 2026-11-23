@@ -10,6 +10,7 @@ import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.DetourPurpose
 import com.swmansion.detour.consent.GateDecision
 import com.swmansion.detour.models.DirectMatchRequest
+import com.swmansion.detour.models.MetaInstallReferrer
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -47,6 +48,7 @@ class DetourEndpointsTest {
             DetourEndpoint.SDK_CONFIG to "https://godetour.dev/api/sdk/config",
             DetourEndpoint.SDK_CONSENT to "https://godetour.dev/api/sdk/consent",
             DetourEndpoint.SDK_DISABLE to "https://godetour.dev/api/sdk/disable",
+            DetourEndpoint.SDK_META_INSTALL_REFERRER to "https://godetour.dev/api/sdk/meta-install-referrer",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -150,6 +152,7 @@ class ApiClientsBaseUrlTest {
         SdkApiClient(config).fetchConfig(etag = null)
         SdkApiClient(config).sendConsent(DetourConsent(mapOf(DetourPurpose.ANALYTICS to true)), null, "device", null)
         SdkApiClient(config).sendKillSwitch(enabled = false, atMs = 0, deviceId = "device")
+        SdkApiClient(config).sendLateMetaReferrer("device", MetaInstallReferrer("encrypted", true, 0, "facebook"))
         listOf(
             AnalyticsRequest.Event("test", null, 0),
             AnalyticsRequest.Retention("app_open", 0),

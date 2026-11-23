@@ -9,4 +9,5 @@ internal object StorageKeys {
     const val USER_ID = "Detour_userId"
     const val SDK_CONFIG = "Detour_sdkConfig"
     const val CONSENT = "Detour_consent"
+    const val LATE_META_REFERRER = "Detour_lateMetaReferrer"
 }

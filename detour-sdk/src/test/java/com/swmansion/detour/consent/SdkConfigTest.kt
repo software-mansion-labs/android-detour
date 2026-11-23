@@ -1,7 +1,10 @@
 package com.swmansion.detour.consent
 
 import com.swmansion.detour.consent.SdkConfigStore.FetchResult
+import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.test.InMemoryStorage
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -48,11 +51,28 @@ class SdkConfigTest {
 
     @Test
     fun `server values replace the fallback and survive relaunch`() = runTest {
-        assertTrue(SdkConfigStore(storage, "app").apply(FetchResult.Updated(body, "\"v1\"")))
+        SdkConfigStore(storage, "app").apply(FetchResult.Updated(body, "\"v1\""))
 
         val relaunched = SdkConfigStore(storage, "app")
         assertEquals(ConsentGateDefault.CLOSED, relaunched.current().gateDefault(DetourPurpose.ANALYTICS))
         assertEquals("\"v1\"", relaunched.etag())
+    }
+
+    @Test
+    fun `the fetched config decides while it is being saved`() = runTest {
+        val saving = CompletableDeferred<Unit>()
+        val slowStorage = object : DetourStorage {
+            override suspend fun getItem(key: String): String? = null
+            override suspend fun setItem(key: String, value: String) = saving.await()
+        }
+        val store = SdkConfigStore(slowStorage, "app")
+
+        val applying = launch { store.apply(FetchResult.Updated(body, "\"v1\"")) }
+        testScheduler.runCurrent()
+        assertEquals(ConsentGateDefault.CLOSED, store.current().gateDefault(DetourPurpose.ANALYTICS))
+
+        saving.complete(Unit)
+        applying.join()
     }
 
     @Test
@@ -69,8 +89,8 @@ class SdkConfigTest {
         val store = SdkConfigStore(storage, "app")
         store.apply(FetchResult.Updated(body, "\"v1\""))
 
-        assertFalse(store.apply(FetchResult.NotModified))
-        assertFalse(store.apply(FetchResult.Failed))
+        store.apply(FetchResult.NotModified)
+        store.apply(FetchResult.Failed)
         assertEquals(ConsentGateDefault.CLOSED, store.current().gateDefault(DetourPurpose.ANALYTICS))
         assertEquals("\"v1\"", store.etag())
     }
@@ -78,7 +98,7 @@ class SdkConfigTest {
     @Test
     fun `body in an unexpected shape is ignored`() = runTest {
         val store = SdkConfigStore(storage, "app")
-        assertFalse(store.apply(FetchResult.Updated("""{"schema_version": 1, "consent_gate_default": "open"}""", null)))
+        store.apply(FetchResult.Updated("""{"schema_version": 1, "consent_gate_default": "open"}""", null))
         assertEquals(SdkConfig.FALLBACK, store.current())
     }
 

@@ -39,8 +39,9 @@ internal data class SdkConfig(
     )
 
     companion object {
-        // The only gate values written in the SDK, used before the first successful fetch
-        // (API contract, consent gate fallback). Every other value comes from the server.
+        // The only gate values written in the SDK, used when the first fetch failed and nothing is
+        // cached. Until that fetch ends every gate is closed (see UNTIL_FIRST_FETCH); every other
+        // value comes from the server.
         val FALLBACK = SdkConfig(
             schemaVersion = 1,
             consentGateDefaults = mapOf(DetourPurpose.ANALYTICS to ConsentGateDefault.OPEN),
@@ -106,12 +107,15 @@ internal class SdkConfigStore(private val storage: DetourStorage, private val ap
         return cached?.etag
     }
 
-    /** Ends the first fetch whatever its result. Returns true when the config changed. */
-    suspend fun apply(result: FetchResult): Boolean {
+    /** Ends the first fetch whatever its result. */
+    suspend fun apply(result: FetchResult) {
         load()
+        val fetched = (result as? FetchResult.Updated)?.let { SdkConfig.fromJson(it.body) }
+        // The fetched config is in place before the fetch counts as ended, so no request is
+        // decided by the fallback in between.
+        if (fetched != null) config = fetched
         hasFetchEnded = true
-        if (result !is FetchResult.Updated) return false
-        val fetched = SdkConfig.fromJson(result.body) ?: return false
+        if (fetched == null || result !is FetchResult.Updated) return
 
         val saved = Cached(appId, result.etag, result.body)
         mutex.withLock {
@@ -119,9 +123,6 @@ internal class SdkConfigStore(private val storage: DetourStorage, private val ap
             runCatching { storage.setItem(StorageKeys.SDK_CONFIG, HttpClient.gson.toJson(saved)) }
                 .onFailure { Log.w(TAG, "[Detour:CONFIG] Failed to save the sdk config.", it) }
         }
-        val changed = fetched != config
-        config = fetched
-        return changed
     }
 
     // A cache from another app ID is ignored.
@@ -131,7 +132,7 @@ internal class SdkConfigStore(private val storage: DetourStorage, private val ap
             if (loaded) return
             val saved = runCatching {
                 storage.getItem(StorageKeys.SDK_CONFIG)?.let { HttpClient.gson.fromJson(it, Cached::class.java) }
-            }.getOrNull()
+            }.onFailure { Log.w(TAG, "[Detour:CONFIG] Failed to read the cached sdk config.", it) }.getOrNull()
             val savedConfig = saved?.takeIf { it.appId == appId }?.let { SdkConfig.fromJson(it.body) }
             if (saved != null && savedConfig != null) {
                 cached = saved

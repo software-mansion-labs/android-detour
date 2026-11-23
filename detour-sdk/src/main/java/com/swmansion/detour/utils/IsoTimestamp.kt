@@ -6,7 +6,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/** UTC with milliseconds: the format of every new timestamp field in the API contract. */
+/** UTC with milliseconds: the format of every new timestamp field in the API. */
 internal object IsoTimestamp {
     private const val PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
 

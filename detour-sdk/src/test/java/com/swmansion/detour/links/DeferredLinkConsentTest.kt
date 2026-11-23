@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.Interceptor
@@ -22,6 +23,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -74,8 +76,9 @@ class DeferredLinkConsentTest {
             ),
         )
         var reports = 0
-        val firstActivity = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
-            Detour.getDeferredLink(onLinkProcessed = { reports++ })
+        var deliveredToFirstActivity: LinkResult? = null
+        val firstActivity = launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+            deliveredToFirstActivity = Detour.getDeferredLink(onLinkProcessed = { reports++ })
         }
         withTimeout(5_000) { while (reports == 0) delay(10) }
         delay(1_500)
@@ -94,5 +97,7 @@ class DeferredLinkConsentTest {
         assertEquals(listOf("mmp"), matchRequests.toList())
         // The result is delivered once in the session.
         assertEquals(LinkResult.NotFirstLaunch, Detour.getDeferredLink())
+        // The cancelled caller gets no result, not even an error.
+        assertNull(deliveredToFirstActivity)
     }
 }

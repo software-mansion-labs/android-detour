@@ -94,7 +94,7 @@ internal class ConsentStore(
                 storage.getItem(StorageKeys.CONSENT)
                     ?.let { HttpClient.gson.fromJson(it, Map::class.java) }
                     ?.let { wire -> DetourConsent.fromWire(wire)?.let { Saved(it, wire[CONFIRMED_FOR] as? String) } }
-            }.getOrNull()
+            }.onFailure { Log.w(TAG, "[Detour:CONSENT] Failed to read the stored consent.", it) }.getOrNull()
             loaded = true
         }
         return saved

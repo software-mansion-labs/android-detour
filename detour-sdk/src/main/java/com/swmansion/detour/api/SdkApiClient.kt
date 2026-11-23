@@ -5,6 +5,7 @@ import androidx.annotation.VisibleForTesting
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.KillSwitchReporter.Outcome
+import com.swmansion.detour.models.MetaInstallReferrer
 import com.swmansion.detour.utils.IsoTimestamp
 import com.swmansion.detour.consent.SdkConfigStore.FetchResult
 import kotlinx.coroutines.Dispatchers
@@ -73,10 +74,25 @@ internal class SdkApiClient(private val config: DetourConfig) {
 
         return when {
             status in 200..299 -> Outcome.CONFIRMED
-            status == 429 || status >= 500 -> Outcome.RETRY
+            isRetryable(status) -> Outcome.RETRY
             else -> {
                 Log.e(TAG, "[Detour:KILL_SWITCH] sdk/disable rejected: $status; sent again on the next launch.")
                 Outcome.STOP
+            }
+        }
+    }
+
+    /** `true` once the referrer is settled: taken, or rejected for good. `false` keeps it for the next launch. */
+    suspend fun sendLateMetaReferrer(deviceId: String, referrer: MetaInstallReferrer): Boolean {
+        val body = mapOf("device_id" to deviceId, "meta_install_referrer" to referrer)
+        val status = post(DetourEndpoint.SDK_META_INSTALL_REFERRER, body) ?: return false
+        return when {
+            status in 200..299 -> true
+            // 404: the install is not saved yet.
+            status == 404 || isRetryable(status) -> false
+            else -> {
+                Log.w(TAG, "[Detour:ATTRIBUTION] meta-install-referrer rejected: $status")
+                true
             }
         }
     }
@@ -103,6 +119,9 @@ internal class SdkApiClient(private val config: DetourConfig) {
 
     companion object {
         private const val TAG = "SdkApiClient"
+
+        /** A failure the same request can succeed after, later. */
+        private fun isRetryable(status: Int) = status == 429 || status >= 500
 
         // The server rejects the whole consent for an empty text, so an empty text is not sent.
         @VisibleForTesting

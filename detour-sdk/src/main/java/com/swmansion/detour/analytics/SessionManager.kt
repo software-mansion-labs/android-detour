@@ -67,7 +67,7 @@ internal class SessionManager(private val now: () -> Long = System::currentTimeM
 
     companion object {
         // PROVISIONAL: more than 30 min in the background starts a new session, the threshold Google
-        // Analytics and Adjust use, until the API contract settles on an SDK constant or a server value.
+        // Analytics and Adjust use.
         const val BACKGROUND_TIMEOUT_MS = 30 * 60 * 1000L
     }
 }

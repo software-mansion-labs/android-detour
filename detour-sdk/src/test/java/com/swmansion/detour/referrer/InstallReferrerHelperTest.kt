@@ -24,44 +24,44 @@ class InstallReferrerHelperTest {
     }
 
     @Test
-    fun `extractClickId - parses click_id from referrer string`() {
+    fun `click_id - parses click_id from referrer string`() {
         val referrer = "utm_source=google&click_id=abc123&utm_medium=cpc"
-        val result = helper.extractClickId(referrer)
+        val result = helper.parseReferrerParams(referrer)["click_id"]
         assertEquals("abc123", result)
     }
 
     @Test
-    fun `extractClickId - handles URL-encoded referrer`() {
+    fun `click_id - handles URL-encoded referrer`() {
         val referrer = "utm_source%3Dgoogle%26click_id%3Dxyz789%26utm_medium%3Dcpc"
-        val result = helper.extractClickId(referrer)
+        val result = helper.parseReferrerParams(referrer)["click_id"]
         assertEquals("xyz789", result)
     }
 
     @Test
-    fun `extractClickId - returns null when click_id is missing`() {
+    fun `click_id - returns null when click_id is missing`() {
         val referrer = "utm_source=google&utm_medium=cpc"
-        val result = helper.extractClickId(referrer)
+        val result = helper.parseReferrerParams(referrer)["click_id"]
         assertNull(result)
     }
 
     @Test
-    fun `extractClickId - click_id at start of string`() {
+    fun `click_id - click_id at start of string`() {
         val referrer = "click_id=first123&utm_source=google"
-        val result = helper.extractClickId(referrer)
+        val result = helper.parseReferrerParams(referrer)["click_id"]
         assertEquals("first123", result)
     }
 
     @Test
-    fun `extractClickId - click_id at end of string`() {
+    fun `click_id - click_id at end of string`() {
         val referrer = "utm_source=google&click_id=last456"
-        val result = helper.extractClickId(referrer)
+        val result = helper.parseReferrerParams(referrer)["click_id"]
         assertEquals("last456", result)
     }
 
     @Test
-    fun `extractClickId - click_id is only parameter`() {
+    fun `click_id - click_id is only parameter`() {
         val referrer = "click_id=solo789"
-        val result = helper.extractClickId(referrer)
+        val result = helper.parseReferrerParams(referrer)["click_id"]
         assertEquals("solo789", result)
     }
 

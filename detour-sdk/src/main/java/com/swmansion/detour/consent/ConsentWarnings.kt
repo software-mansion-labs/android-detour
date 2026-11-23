@@ -23,12 +23,16 @@ internal object ConsentWarnings {
 
     fun resetForTests() = given.clear()
 
-    /** The stored grant warning, for every place that decides a purpose. */
-    fun warnIfStoredGrantWaits(purpose: String, decision: GateDecision, storedConsent: DetourConsent?) {
-        if (decision != GateDecision.WAIT || storedConsent?.purposes?.get(purpose) != true) return
+    /**
+     * For the places that hold a request back while the gate waits. Warns and returns true when a
+     * grant stored on an earlier launch is why it waits.
+     */
+    fun warnIfStoredGrantWaits(purpose: String, storedConsent: DetourConsent?): Boolean {
+        if (storedConsent?.purposes?.get(purpose) != true) return false
         warnOnce(
             "storedGrantNotPassed",
             "A consent to $purpose from an earlier launch does not count until setConsent passes it again on this launch.",
         )
+        return true
     }
 }

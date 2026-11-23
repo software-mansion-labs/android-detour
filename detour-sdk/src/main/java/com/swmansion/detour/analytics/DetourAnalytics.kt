@@ -174,11 +174,14 @@ object DetourAnalytics {
             }
             decision
         }
-        if (decision == GateDecision.WAIT && sdkConfigStore.isKnown()) {
-            ConsentWarnings.warnOnce(
-                "analyticsWaitsForConsent",
-                "Analytics waits: the Detour server keeps it closed until your app calls setConsent on this launch.",
-            )
+        if (decision == GateDecision.WAIT) {
+            val isStoredGrantWarned = ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ANALYTICS, inputs.storedConsent)
+            if (!isStoredGrantWarned && sdkConfigStore.isKnown()) {
+                ConsentWarnings.warnOnce(
+                    "analyticsWaitsForConsent",
+                    "Analytics waits: the Detour server keeps it closed until your app calls setConsent on this launch.",
+                )
+            }
         }
         if (decision != GateDecision.SEND) return
 

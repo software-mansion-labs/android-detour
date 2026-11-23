@@ -134,9 +134,6 @@ internal class InstallReferrerHelper(private val context: Context) {
         )
     }
 
-    @VisibleForTesting
-    internal fun extractClickId(referrerUrl: String): String? = parseReferrerParams(referrerUrl)["click_id"]
-
     /**
      * Splits the referrer into parameters, then URL-decodes each key and value, so an encoded
      * `&` or `=` stays inside its value. A referrer with no `=` but with `%3D` is encoded twice

@@ -3,6 +3,7 @@ package com.swmansion.detour.referrer
 import com.swmansion.detour.models.MetaInstallReferrer
 import com.swmansion.detour.referrer.MetaInstallReferrerReader.Provider
 import java.util.concurrent.CountDownLatch
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -30,7 +31,7 @@ class MetaInstallReferrerReaderTest {
             }
         }
 
-        assertEquals("instagram", reader.read("123")?.sourceApp)
+        assertEquals("instagram", reader.read("123") {}?.sourceApp)
         assertEquals(Provider.entries.map { it to "123" }, asked)
     }
 
@@ -42,15 +43,17 @@ class MetaInstallReferrerReaderTest {
             referrer(provider, 100)
         }
 
+        val late = CompletableDeferred<MetaInstallReferrer>()
         try {
-            assertNull(reader.read("123"))
+            assertNull(reader.read("123") { late.complete(it) })
         } finally {
             release.countDown()
         }
+        assertEquals("facebook", late.await().sourceApp)
     }
 
     @Test
     fun `nothing to read without a Meta app`() = runBlocking {
-        assertNull(MetaInstallReferrerReader(RuntimeEnvironment.getApplication()).read("123"))
+        assertNull(MetaInstallReferrerReader(RuntimeEnvironment.getApplication()).read("123") {})
     }
 }
