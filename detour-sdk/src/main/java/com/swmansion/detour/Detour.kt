@@ -35,6 +35,7 @@ import com.swmansion.detour.storage.DefaultStorageProvider
 import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.InstallStore
 import com.swmansion.detour.utils.UrlHelpers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -445,6 +446,8 @@ object Detour {
 
             // Step 2: Fallback to deferred link
             processDeferredLink(report)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing link", e)
             LinkResult.Error(e)
@@ -476,6 +479,8 @@ object Detour {
 
         return try {
             processDeferredLink(report)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing deferred link", e)
             LinkResult.Error(e)
