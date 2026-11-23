@@ -274,10 +274,8 @@ object Detour {
             return DetourStatus(isStarted = false, isEnabled = false, hasConsentThisLaunch = false, purposes = emptyMap())
         }
         val passed = consentStore.passedThisLaunch
-        val purposeIds = setOf(
-            DetourPurpose.ANALYTICS, DetourPurpose.ATTRIBUTION,
-            DetourPurpose.AD_NETWORK_SHARING, DetourPurpose.AD_PERSONALIZATION,
-        ) + sdkConfigStore.current().consentGateDefaults.keys + passed?.purposes?.keys.orEmpty()
+        val purposeIds = DetourPurpose.KNOWN + sdkConfigStore.current().consentGateDefaults.keys +
+            passed?.purposes?.keys.orEmpty()
         return DetourStatus(
             isStarted = started.isCompleted,
             isEnabled = isEnabled(),
@@ -426,7 +424,6 @@ object Detour {
         }
 
         return try {
-            // Step 1: Try to extract link from intent (unless DEFERRED_ONLY)
             if (config.linkProcessingMode != LinkProcessingMode.DEFERRED_ONLY) {
                 if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
                     val uri = intent.data!!
@@ -444,7 +441,6 @@ object Detour {
                 }
             }
 
-            // Step 2: Fallback to deferred link
             processDeferredLink(report)
         } catch (e: CancellationException) {
             throw e

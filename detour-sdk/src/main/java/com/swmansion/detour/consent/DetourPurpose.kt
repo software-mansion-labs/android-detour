@@ -16,4 +16,6 @@ object DetourPurpose {
 
     /** Ad personalization, for example Google's `ad_personalization`. */
     const val AD_PERSONALIZATION = "ad_personalization"
+
+    internal val KNOWN = setOf(ANALYTICS, ATTRIBUTION, AD_NETWORK_SHARING, AD_PERSONALIZATION)
 }
