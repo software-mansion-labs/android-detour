@@ -16,6 +16,7 @@ internal enum class DetourEndpoint(val path: String) {
     SDK_CONFIG("api/sdk/config"),
     SDK_CONSENT("api/sdk/consent"),
     SDK_DISABLE("api/sdk/disable"),
+    SDK_META_INSTALL_REFERRER("api/sdk/meta-install-referrer"),
 }
 
 internal object DetourEndpoints {

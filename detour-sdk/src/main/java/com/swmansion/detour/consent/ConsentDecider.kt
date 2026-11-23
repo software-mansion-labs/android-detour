@@ -13,13 +13,9 @@ internal class ConsentDecider(
 
     // Reads the consent passed on this launch last, so a caller deciding under a lock sees one
     // passed meanwhile.
-    fun decide(purpose: String, inputs: Inputs): GateDecision {
-        val decision = ConsentGate.decide(
-            purpose, inputs.isEnabled, consentStore.passedThisLaunch, inputs.storedConsent, inputs.gateDefault
-        )
-        ConsentWarnings.warnIfStoredGrantWaits(purpose, decision, inputs.storedConsent)
-        return decision
-    }
+    fun decide(purpose: String, inputs: Inputs): GateDecision = ConsentGate.decide(
+        purpose, inputs.isEnabled, consentStore.passedThisLaunch, inputs.storedConsent, inputs.gateDefault
+    )
 
     suspend fun decideNow(purpose: String): GateDecision = decide(purpose, read(purpose))
 }

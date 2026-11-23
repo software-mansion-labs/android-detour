@@ -39,13 +39,12 @@ class ConsentSwitchesTest {
     }
 
     @Test
-    fun `a stored grant warns only while its purpose waits`() {
+    fun `a stored grant warns only for its own purpose`() {
         val stored = DetourConsent(purposes = mapOf(DetourPurpose.ATTRIBUTION to true))
-        ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ATTRIBUTION, GateDecision.SEND, stored)
-        ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ANALYTICS, GateDecision.WAIT, stored)
+        assertEquals(false, ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ANALYTICS, stored))
         assertEquals(0, warnings.size)
 
-        ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ATTRIBUTION, GateDecision.WAIT, stored)
+        assertEquals(true, ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ATTRIBUTION, stored))
         assertEquals(1, warnings.size)
     }
 

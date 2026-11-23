@@ -29,6 +29,7 @@ import com.swmansion.detour.models.LinkType
 import com.swmansion.detour.models.MetaInstallReferrer
 import com.swmansion.detour.models.ShortLinkResponse
 import com.swmansion.detour.referrer.InstallReferrerHelper
+import com.swmansion.detour.referrer.LateMetaReferrerSender
 import com.swmansion.detour.referrer.MetaInstallReferrerReader
 import com.swmansion.detour.signals.SignalCollector
 import com.swmansion.detour.storage.DefaultStorageProvider
@@ -103,6 +104,7 @@ object Detour {
     private lateinit var signalCollector: SignalCollector
     private lateinit var installReferrerHelper: InstallReferrerHelper
     private lateinit var metaInstallReferrerReader: MetaInstallReferrerReader
+    private lateinit var lateMetaReferrerSender: LateMetaReferrerSender
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
     private lateinit var sdkApiClient: SdkApiClient
@@ -345,6 +347,18 @@ object Detour {
         }
         this.consentDecider = ConsentDecider(consentStore, sdkConfigStore, ::isEnabled)
         HttpClient.attributionDecision = { decideNow(DetourPurpose.ATTRIBUTION) }
+        this.lateMetaReferrerSender = LateMetaReferrerSender(
+            storage,
+            deviceId = { installStore.getDeviceId() },
+            attributionDecision = { decideNow(DetourPurpose.ATTRIBUTION) },
+            send = sdkApiClient::sendLateMetaReferrer,
+        )
+        // A referrer kept on an earlier launch goes once the gate decides: the app passes its
+        // consent again after configure.
+        scope.launch {
+            awaitAttributionDecision()
+            lateMetaReferrerSender.sendKept()
+        }
         ConsentWarnings.isDevelopment =
             (context.applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         refreshSdkConfig()
@@ -568,11 +582,15 @@ object Detour {
     }
 
     // One decision for the header and the Meta referrer: the referrer never goes out as core.
-    private suspend fun attributionFields(): Pair<String, MetaInstallReferrer?> {
+    private suspend fun attributionFields(deviceId: String, matchEnded: Deferred<Unit>): Pair<String, MetaInstallReferrer?> {
         val sdkPackage = requestSdkPackage(config)
         val facebookAppId = config.attribution?.facebookAppId?.takeIf { it.isNotBlank() }
         if (sdkPackage != "mmp" || facebookAppId == null) return sdkPackage to null
-        return sdkPackage to metaInstallReferrerReader.read(facebookAppId)
+        return sdkPackage to metaInstallReferrerReader.read(facebookAppId) { late ->
+            lateMetaReferrerSender.keep(deviceId, late)
+            matchEnded.await()
+            lateMetaReferrerSender.sendKept()
+        }
     }
 
     /**
@@ -607,10 +625,14 @@ object Detour {
         // or before the consent decision still matches on its next launch.
         started.await()
         if (isWaitingForAttributionConsent()) {
-            ConsentWarnings.warnOnce(
-                "firstMatchWaits",
-                "The first deferred link match waits for consent to attribution. Pass it with setConsent.",
-            )
+            val isStoredGrantWarned =
+                ConsentWarnings.warnIfStoredGrantWaits(DetourPurpose.ATTRIBUTION, consentStore.stored())
+            if (!isStoredGrantWarned) {
+                ConsentWarnings.warnOnce(
+                    "firstMatchWaits",
+                    "The first deferred link match waits for consent to attribution. Pass it with setConsent.",
+                )
+            }
         }
         awaitAttributionDecision()
         installStore.markFirstLaunchHandled()
@@ -624,31 +646,37 @@ object Detour {
         val userId = userIdStore.current()
 
         val isDirectMatch = clickId != null && InstallReferrerHelper.isDirectMatchClickId(clickId)
-        val link: String? = if (!isEnabled()) {
-            // Routing by the click ID still works with the SDK off, with the v1 body only.
-            if (clickId == null || !isDirectMatch) return LinkResult.NoLink
-            Log.d(TAG, "SDK disabled; direct matching with click_id and no device data")
-            apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
-        } else if (clickId != null && isDirectMatch) {
-            Log.d(TAG, "Using direct matching with click_id")
-            val (sdkPackage, metaReferrer) = attributionFields()
-            apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer, metaReferrer), sdkPackage = sdkPackage)
-        } else {
-            if (clickId == null) {
-                Log.d(TAG, "The click_id not found, using signal-based matching")
+        // The late Meta referrer is sent once this request ended, so the server has the install.
+        val matchEnded = CompletableDeferred<Unit>()
+        val link: String? = try {
+            if (!isEnabled()) {
+                // Routing by the click ID still works with the SDK off, with the v1 body only.
+                if (clickId == null || !isDirectMatch) return LinkResult.NoLink
+                Log.d(TAG, "SDK disabled; direct matching with click_id and no device data")
+                apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
+            } else if (clickId != null && isDirectMatch) {
+                Log.d(TAG, "Using direct matching with click_id")
+                val (sdkPackage, metaReferrer) = attributionFields(deviceId, matchEnded)
+                apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer, metaReferrer), sdkPackage = sdkPackage)
             } else {
-                Log.d(TAG, "The click_id is not a UUID, using signal-based matching")
+                if (clickId == null) {
+                    Log.d(TAG, "The click_id not found, using signal-based matching")
+                } else {
+                    Log.d(TAG, "The click_id is not a UUID, using signal-based matching")
+                }
+                val (sdkPackage, metaReferrer) = attributionFields(deviceId, matchEnded)
+                apiClient.matchLink(
+                    signalCollector.collectSignals().copy(
+                        deviceId = deviceId,
+                        userId = userId,
+                        installReferrer = referrer,
+                        metaInstallReferrer = metaReferrer,
+                    ),
+                    sdkPackage = sdkPackage,
+                )
             }
-            val (sdkPackage, metaReferrer) = attributionFields()
-            apiClient.matchLink(
-                signalCollector.collectSignals().copy(
-                    deviceId = deviceId,
-                    userId = userId,
-                    installReferrer = referrer,
-                    metaInstallReferrer = metaReferrer,
-                ),
-                sdkPackage = sdkPackage,
-            )
+        } finally {
+            matchEnded.complete(Unit)
         }
 
         if (link == null) {
