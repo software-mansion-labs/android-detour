@@ -3,6 +3,7 @@ package com.swmansion.detour.referrer
 import com.swmansion.detour.models.MetaInstallReferrer
 import com.swmansion.detour.referrer.MetaInstallReferrerReader.Provider
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -21,7 +22,8 @@ class MetaInstallReferrerReaderTest {
 
     @Test
     fun `the latest touch across Meta apps wins`() = runBlocking {
-        val asked = mutableListOf<Pair<Provider, String>>()
+        // Asked at once from several threads.
+        val asked = java.util.concurrent.ConcurrentLinkedQueue<Pair<Provider, String>>()
         val reader = MetaInstallReferrerReader { provider, appId ->
             asked += provider to appId
             when (provider) {
@@ -32,7 +34,7 @@ class MetaInstallReferrerReaderTest {
         }
 
         assertEquals("instagram", reader.read("123") {}?.sourceApp)
-        assertEquals(Provider.entries.map { it to "123" }, asked)
+        assertEquals(Provider.entries.map { it to "123" }.toSet(), asked.toSet())
     }
 
     @Test
@@ -55,5 +57,23 @@ class MetaInstallReferrerReaderTest {
     @Test
     fun `nothing to read without a Meta app`() = runBlocking {
         assertNull(MetaInstallReferrerReader(RuntimeEnvironment.getApplication()).read("123") {})
+    }
+
+    @Test
+    fun `asks the Meta apps at once`() = runBlocking {
+        // Each answer waits until both apps were asked, so a read one by one gets nothing from Facebook.
+        val bothAsked = CountDownLatch(2)
+        val reader = MetaInstallReferrerReader { provider, _ ->
+            when (provider) {
+                Provider.FACEBOOK_LITE -> null
+                else -> {
+                    bothAsked.countDown()
+                    if (!bothAsked.await(1, TimeUnit.SECONDS)) return@MetaInstallReferrerReader null
+                    referrer(provider, if (provider == Provider.FACEBOOK) 200 else 100)
+                }
+            }
+        }
+
+        assertEquals("facebook", reader.read("123") {}?.sourceApp)
     }
 }

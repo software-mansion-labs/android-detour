@@ -47,14 +47,14 @@ import kotlinx.coroutines.launch
  *
  * @property lifecycleOwner The lifecycle owner whose scope is used for coroutines
  * @property config Detour SDK configuration
- * @property onLinkProcessed Called once in [onCreate], before the result or before the SDK starts
+ * @property onReadyForUI Called once in [onCreate], before the result or before the SDK starts
  *   waiting for consent, as in [Detour.processLink]
  * @property onLinkResult Callback invoked with the link processing result
  */
 class DetourDelegate @JvmOverloads constructor(
     private val lifecycleOwner: LifecycleOwner,
     val config: DetourConfig,
-    private val onLinkProcessed: (() -> Unit)? = null,
+    private val onReadyForUI: (() -> Unit)? = null,
     private val onLinkResult: (LinkResult) -> Unit
 ) {
 
@@ -65,7 +65,7 @@ class DetourDelegate @JvmOverloads constructor(
      */
     fun onCreate(intent: Intent) {
         lifecycleOwner.lifecycleScope.launch {
-            val result = Detour.processLink(intent, onLinkProcessed)
+            val result = Detour.processLink(intent, onReadyForUI)
             onLinkResult(result)
         }
     }

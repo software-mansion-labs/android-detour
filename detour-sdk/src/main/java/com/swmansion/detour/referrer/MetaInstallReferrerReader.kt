@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -37,8 +38,14 @@ internal class MetaInstallReferrerReader(
     suspend fun read(facebookAppId: String, onLate: suspend (MetaInstallReferrer) -> Unit): MetaInstallReferrer? {
         // PROVISIONAL: Meta's sample reads only the first app it finds. Each app keeps its own last
         // touch, so all are read and the latest one wins, as the last touch before the install.
+        // Each query can start a Meta app that is not running, so the apps are asked at once to stay
+        // within the limit.
         val reading = scope.async {
-            Provider.entries.mapNotNull { query(it, facebookAppId) }.maxByOrNull { it.actualTimestamp }
+            Provider.entries
+                .map { provider -> async { query(provider, facebookAppId) } }
+                .awaitAll()
+                .filterNotNull()
+                .maxByOrNull { it.actualTimestamp }
         }
         return withTimeoutOrNull(TIMEOUT_MS) { reading.await() } ?: run {
             scope.launch { reading.await()?.let { onLate(it) } }
