@@ -2,6 +2,7 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import com.swmansion.detour.DetourConfig
+import com.google.gson.annotations.SerializedName
 import com.swmansion.detour.FlutterSdkHeaderResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,7 +56,8 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
 
                 HttpClient.okHttp.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        Log.w(TAG, "[Detour:ANALYTICS] Event send failed: ${response.code}")
+                        val body = runCatching { response.body?.string() }.getOrNull()
+                        Log.w(TAG, "[Detour:ANALYTICS] ${eventRefusalMessage(response.code, body, eventName)}")
                     }
                 }
             } catch (e: Exception) {
@@ -105,5 +107,32 @@ internal class AnalyticsApiClient(private val config: DetourConfig) {
         private const val TAG = "AnalyticsApiClient"
         private const val EVENT_URL = "https://godetour.dev/api/analytics/event"
         private const val RETENTION_URL = "https://godetour.dev/api/analytics/retention"
+
+        internal fun eventRefusalMessage(statusCode: Int, body: String?, eventName: String): String {
+            when (statusCode) {
+                413 -> return "Event \"$eventName\" refused: the request body is too large."
+                429 -> return "Event \"$eventName\" refused: rate limit exceeded."
+                400 -> {
+                    val fieldError = body?.let {
+                        runCatching { HttpClient.gson.fromJson(it, ValidationErrorBody::class.java) }.getOrNull()
+                    }?.error?.fieldErrors?.eventName?.firstOrNull()
+                    if (fieldError != null) return "Event \"$eventName\" refused: $fieldError."
+                }
+            }
+            return "Event send failed: $statusCode"
+        }
     }
+}
+
+// The body of a 400 from the event endpoint. Only `event_name` is read.
+internal data class ValidationErrorBody(
+    @SerializedName("error") val error: Error?
+) {
+    data class Error(
+        @SerializedName("fieldErrors") val fieldErrors: FieldErrors?
+    )
+
+    data class FieldErrors(
+        @SerializedName("event_name") val eventName: List<String>?
+    )
 }

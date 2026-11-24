@@ -1,6 +1,7 @@
 package com.swmansion.detour
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
@@ -98,7 +99,9 @@ object Detour {
         this.firstLaunchDetector = FirstLaunchDetector(storage)
 
         // Initialize analytics subsystem
-        DetourAnalytics.initialize(config, storage)
+        // The SDK's own BuildConfig.DEBUG is always false in the published AAR, so ask the app.
+        val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        DetourAnalytics.initialize(config, storage, isDebuggable)
         DetourAnalytics.logAppOpenIfNeeded()
 
         this.isInitialized = true

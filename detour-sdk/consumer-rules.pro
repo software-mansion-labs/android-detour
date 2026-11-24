@@ -8,3 +8,5 @@
 -keep class com.swmansion.detour.models.LocaleInfo { *; }
 -keep class com.swmansion.detour.models.LinkMatchResponse { *; }
 -keep class com.swmansion.detour.models.ShortLinkResponse { *; }
+-keep class com.swmansion.detour.api.ValidationErrorBody { *; }
+-keep class com.swmansion.detour.api.ValidationErrorBody$* { *; }
