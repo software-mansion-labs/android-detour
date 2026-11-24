@@ -196,7 +196,7 @@ val config = DetourConfig(
 
 ## Analytics
 
-The SDK includes a built-in analytics module. `Detour.initialize()` automatically tracks app opens for retention. You can also log custom events using the predefined `DetourEventNames` enum:
+The SDK includes a built-in analytics module. `Detour.initialize()` automatically tracks app opens for retention. You can also log events, either with a predefined `DetourEventNames` value or under your own name:
 
 <details>
 <summary>Analytics example</summary>
@@ -206,10 +206,21 @@ import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.analytics.DetourEventNames
 
 DetourAnalytics.logEvent(DetourEventNames.Purchase)
+DetourAnalytics.logEvent("level_complete", mapOf("level" to 3))
 DetourAnalytics.logRetention("week_1")
 ```
 
 </details>
+
+Custom event names (from 1.2.0) follow the same rules as on the server:
+
+- Lowercase letters, digits and `_`, 1 to 64 characters (`^[a-z0-9_]{1,64}$`).
+- Names starting with `af_` or `dt_`, and `opened_via_universal_link`, are reserved. `DetourEventNames.OpenedViaUniversalLink` is deprecated for this reason, and `logEvent` drops it.
+- An app can have up to 500 custom names. `DetourEventNames` values don't count, and a name that's already registered keeps working once the limit is reached.
+- Keep names static. Put changing values such as IDs in `data`: `logEvent("level_complete", mapOf("level" to 3))`, not `logEvent("level_${id}_complete")`, which registers a new name for every level and soon reaches the limit.
+- `data` can be up to 2,048 bytes as JSON.
+
+`logEvent` drops a name that breaks these rules and logs an error. When the server refuses an event, for example over the 500-name limit, the SDK logs the server's reason.
 
 See the [analytics docs](https://detour.swmansion.com/docs/) for the full event list and retention tracking setup.
 
@@ -363,6 +374,9 @@ class DetourDelegate(
 object DetourAnalytics {
     /** Log a predefined analytics event with optional data. */
     fun logEvent(eventName: DetourEventNames, data: Any? = null)
+
+    /** Log an event under a custom name with optional data. Invalid names are dropped. */
+    fun logEvent(eventName: String, data: Any? = null)
 
     /** Log a retention event. */
     fun logRetention(eventName: String)

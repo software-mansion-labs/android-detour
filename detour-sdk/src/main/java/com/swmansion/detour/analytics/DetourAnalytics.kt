@@ -3,6 +3,7 @@ package com.swmansion.detour.analytics
 import android.util.Log
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.api.AnalyticsApiClient
+import com.swmansion.detour.api.HttpClient
 import com.swmansion.detour.storage.DetourStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,14 +29,18 @@ object DetourAnalytics {
     private lateinit var deviceIdProvider: DeviceIdProvider
 
     @Volatile
+    private var isDebuggable = false
+
+    @Volatile
     private var appOpenFired = false
 
     /**
      * Internal — called from [com.swmansion.detour.Detour.initialize].
      */
-    internal fun initialize(config: DetourConfig, storage: DetourStorage) {
+    internal fun initialize(config: DetourConfig, storage: DetourStorage, isDebuggable: Boolean) {
         apiClient = AnalyticsApiClient(config)
         deviceIdProvider = DeviceIdProvider(storage)
+        this.isDebuggable = isDebuggable
         isInitialized = true
     }
 
@@ -48,18 +53,53 @@ object DetourAnalytics {
     @JvmStatic
     @JvmOverloads
     fun logEvent(eventName: DetourEventNames, data: Any? = null) {
+        logEvent(eventName.eventName, data)
+    }
+
+    /**
+     * Log an analytics event under a custom name with optional data.
+     *
+     * Custom names must match `^[a-z0-9_]{1,64}$`. Names starting with `af_` or `dt_`,
+     * and `opened_via_universal_link`, are reserved. An invalid name is dropped and
+     * logged as an error.
+     *
+     * @param eventName The event name, e.g. `level_complete`.
+     * @param data Optional payload — maps, primitives, or any Gson-serializable object.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun logEvent(eventName: String, data: Any? = null) {
         if (!isInitialized) {
             Log.w(TAG, "[Detour:ANALYTICS] Analytics not initialized — call Detour.initialize() first")
             return
         }
 
+        val problem = EventNameRules.problem(eventName)
+        if (problem != null) {
+            Log.e(TAG, "[Detour:ANALYTICS] Event \"$eventName\" dropped: $problem.")
+            return
+        }
+
         scope.launch {
             try {
+                if (isDebuggable && data != null) warnIfDataTooLarge(eventName, data)
                 val deviceId = deviceIdProvider.getDeviceId()
-                apiClient.sendEvent(eventName.eventName, data, deviceId)
+                apiClient.sendEvent(eventName, data, deviceId)
             } catch (e: Exception) {
                 Log.w(TAG, "[Detour:ANALYTICS] logEvent failed", e)
             }
+        }
+    }
+
+    // Debuggable apps only: it serializes `data` a second time just to measure it.
+    private fun warnIfDataTooLarge(eventName: String, data: Any) {
+        val length = runCatching { HttpClient.gson.toJson(data).length }.getOrNull() ?: return
+        if (length > EventNameRules.MAX_DATA_BYTES) {
+            Log.w(
+                TAG,
+                "[Detour:ANALYTICS] Event \"$eventName\" has $length characters of data as JSON. " +
+                    "Detour stores at most ${EventNameRules.MAX_DATA_BYTES} bytes of data per event and may refuse larger events."
+            )
         }
     }
 

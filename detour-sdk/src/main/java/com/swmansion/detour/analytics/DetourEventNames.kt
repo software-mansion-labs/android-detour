@@ -24,5 +24,8 @@ enum class DetourEventNames(val eventName: String) {
     BeginCheckout("begin_checkout"),
     Purchase("purchase"),
     AdImpression("ad_impression"),
+
+    // Kept so that code using it still compiles. Removing it is a breaking change.
+    @Deprecated("Detour records universal link opens itself. This name is reserved, and logEvent drops it.")
     OpenedViaUniversalLink("opened_via_universal_link")
 }
