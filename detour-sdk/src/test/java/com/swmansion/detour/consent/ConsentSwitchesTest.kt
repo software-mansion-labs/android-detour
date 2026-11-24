@@ -1,7 +1,7 @@
 package com.swmansion.detour.consent
 
 import com.swmansion.detour.DetourStatus
-import com.swmansion.detour.LinkProcessedReport
+import com.swmansion.detour.ReadyForUIReport
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -49,13 +49,13 @@ class ConsentSwitchesTest {
     }
 
     @Test
-    fun `the processed link is reported once`() {
+    fun `ready for the UI is reported once`() {
         var reports = 0
-        val report = LinkProcessedReport { reports++ }
-        report.processed()
-        report.processed()
+        val report = ReadyForUIReport { reports++ }
+        report.ready()
+        report.ready()
         assertEquals(1, reports)
-        LinkProcessedReport(null).processed()
+        ReadyForUIReport(null).ready()
     }
 
     @Test

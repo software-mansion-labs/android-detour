@@ -78,7 +78,7 @@ class DeferredLinkConsentTest {
         var reports = 0
         var deliveredToFirstActivity: LinkResult? = null
         val firstActivity = launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
-            deliveredToFirstActivity = Detour.getDeferredLink(onLinkProcessed = { reports++ })
+            deliveredToFirstActivity = Detour.getDeferredLink(onReadyForUI = { reports++ })
         }
         withTimeout(5_000) { while (reports == 0) delay(10) }
         delay(1_500)

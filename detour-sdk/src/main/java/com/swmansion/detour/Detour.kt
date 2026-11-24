@@ -420,7 +420,7 @@ object Detour {
      * In [LinkProcessingMode.DEFERRED_ONLY] mode, steps 1-2 are skipped entirely.
      *
      * @param intent Activity intent to process
-     * @param onLinkProcessed Called once, before this function returns or before the SDK starts
+     * @param onReadyForUI Called once, before this function returns or before the SDK starts
      *   waiting for [start] or for consent to attribution, so an app that holds its UI until the
      *   initial link is handled can show its consent prompt. A deferred link found after that is
      *   still the return value.
@@ -428,10 +428,10 @@ object Detour {
      */
     @JvmStatic
     @JvmOverloads
-    suspend fun processLink(intent: Intent, onLinkProcessed: (() -> Unit)? = null): LinkResult {
-        val report = LinkProcessedReport(onLinkProcessed)
+    suspend fun processLink(intent: Intent, onReadyForUI: (() -> Unit)? = null): LinkResult {
+        val report = ReadyForUIReport(onReadyForUI)
         if (!isInitialized) {
-            report.processed()
+            report.ready()
             return LinkResult.Error(
                 IllegalStateException("Detour SDK not initialized. Call Detour.configure() first.")
             )
@@ -462,7 +462,7 @@ object Detour {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing link", e)
             LinkResult.Error(e)
         } finally {
-            report.processed()
+            report.ready()
         }
     }
 
@@ -473,15 +473,15 @@ object Detour {
      * This should be called once per app session, typically in your main Activity.
      * The function is idempotent - multiple calls in the same session will return NotFirstLaunch.
      *
-     * @param onLinkProcessed As in [processLink].
+     * @param onReadyForUI As in [processLink].
      * @return LinkResult.Success with DEFERRED type, or NotFirstLaunch/NoLink/Error
      */
     @JvmStatic
     @JvmOverloads
-    suspend fun getDeferredLink(onLinkProcessed: (() -> Unit)? = null): LinkResult {
-        val report = LinkProcessedReport(onLinkProcessed)
+    suspend fun getDeferredLink(onReadyForUI: (() -> Unit)? = null): LinkResult {
+        val report = ReadyForUIReport(onReadyForUI)
         if (!isInitialized) {
-            report.processed()
+            report.ready()
             return LinkResult.Error(
                 IllegalStateException("Detour SDK not initialized. Call Detour.configure() first.")
             )
@@ -495,7 +495,7 @@ object Detour {
             Log.e(TAG, "[Detour:RUNTIME_ERROR] Error processing deferred link", e)
             LinkResult.Error(e)
         } finally {
-            report.processed()
+            report.ready()
         }
     }
 
@@ -599,7 +599,7 @@ object Detour {
     // The match runs in the SDK's scope, not the caller's: the caller is often an Activity, and a
     // rotation while the match waits for consent would cancel it. The next caller then gets the
     // same result. A result is delivered once, so a later call in the session gets NotFirstLaunch.
-    private suspend fun processDeferredLink(report: LinkProcessedReport): LinkResult {
+    private suspend fun processDeferredLink(report: ReadyForUIReport): LinkResult {
         val match = synchronized(this) {
             deferredMatch ?: DeferredMatch(scope.async { matchDeferredLink() }).also { deferredMatch = it }
         }
@@ -609,7 +609,7 @@ object Detour {
         }
         // Reported first, so an app that holds its UI until then can still ask for consent.
         if (!match.result.isCompleted && (!started.isCompleted || isWaitingForAttributionConsent())) {
-            report.processed()
+            report.ready()
         }
         val result = match.result.await()
         return if (match.isDelivered.compareAndSet(false, true)) result else LinkResult.NotFirstLaunch
@@ -638,25 +638,31 @@ object Detour {
         installStore.markFirstLaunchHandled()
         Log.d(TAG, "First launch detected, processing deferred link")
 
-        // The referrer goes with both match requests; a UUID click ID in it enables direct matching.
-        val referrer = installReferrerHelper.getReferrerDetails()
-        val clickId = referrer?.clickId
-
         val deviceId = installStore.getDeviceId()
         val userId = userIdStore.current()
 
-        val isDirectMatch = clickId != null && InstallReferrerHelper.isDirectMatchClickId(clickId)
         // The late Meta referrer is sent once this request ended, so the server has the install.
         val matchEnded = CompletableDeferred<Unit>()
+        // Started first, so the fields are read in parallel with the referrer and the signals. The
+        // header and the fields use the same package; with the SDK off it is core, so nothing is read.
+        val attribution = scope.async { attributionFields(deviceId, matchEnded) }
+
+        // Every exit ends the match, so a late Meta referrer read meanwhile does not wait forever.
         val link: String? = try {
+            // The referrer goes with both match requests; a UUID click ID in it enables direct matching.
+            val referrer = installReferrerHelper.getReferrerDetails()
+            val clickId = referrer?.clickId
+            val isDirectMatch = clickId != null && InstallReferrerHelper.isDirectMatchClickId(clickId)
+
             if (!isEnabled()) {
+                attribution.cancel()
                 // Routing by the click ID still works with the SDK off, with the v1 body only.
                 if (clickId == null || !isDirectMatch) return LinkResult.NoLink
                 Log.d(TAG, "SDK disabled; direct matching with click_id and no device data")
                 apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
             } else if (clickId != null && isDirectMatch) {
                 Log.d(TAG, "Using direct matching with click_id")
-                val (sdkPackage, metaReferrer) = attributionFields(deviceId, matchEnded)
+                val (sdkPackage, metaReferrer) = attribution.await()
                 apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer, metaReferrer), sdkPackage = sdkPackage)
             } else {
                 if (clickId == null) {
@@ -664,9 +670,11 @@ object Detour {
                 } else {
                     Log.d(TAG, "The click_id is not a UUID, using signal-based matching")
                 }
-                val (sdkPackage, metaReferrer) = attributionFields(deviceId, matchEnded)
+                // Collected before the fields are awaited, so both run at once.
+                val signals = signalCollector.collectSignals()
+                val (sdkPackage, metaReferrer) = attribution.await()
                 apiClient.matchLink(
-                    signalCollector.collectSignals().copy(
+                    signals.copy(
                         deviceId = deviceId,
                         userId = userId,
                         installReferrer = referrer,
@@ -698,11 +706,11 @@ object Detour {
     }
 }
 
-/** Calls `onLinkProcessed` once, whichever path gets there first. */
-internal class LinkProcessedReport(private val onProcessed: (() -> Unit)?) {
+/** Calls `onReadyForUI` once, whichever path gets there first. */
+internal class ReadyForUIReport(private val onReady: (() -> Unit)?) {
     private val isReported = AtomicBoolean(false)
 
-    fun processed() {
-        if (isReported.compareAndSet(false, true)) onProcessed?.invoke()
+    fun ready() {
+        if (isReported.compareAndSet(false, true)) onReady?.invoke()
     }
 }
