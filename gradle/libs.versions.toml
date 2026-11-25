@@ -13,6 +13,7 @@ coroutines = "1.8.0"
 okhttp = "4.12.0"
 gson = "2.10.1"
 installreferrer = "2.2"
+playServicesAdsIdentifier = "18.1.0"
 lifecycle = "2.7.0"
 activityCompose = "1.12.1"
 composeBom = "2024.09.00"
@@ -34,6 +35,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 installreferrer = { group = "com.android.installreferrer", name = "installreferrer", version.ref = "installreferrer" }
+play-services-ads-identifier = { group = "com.google.android.gms", name = "play-services-ads-identifier", version.ref = "playServicesAdsIdentifier" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }

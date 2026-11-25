@@ -4,7 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.ApplicationInfo
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.google.gson.JsonObject
 import com.swmansion.detour.analytics.DetourAnalytics
 import com.swmansion.detour.api.DetourApiClient
 import com.swmansion.detour.api.RequestContextProvider
@@ -20,8 +26,12 @@ import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.DetourPurpose
 import com.swmansion.detour.consent.KillSwitchReporter
 import com.swmansion.detour.consent.SdkConfigStore
+import com.swmansion.detour.identifiers.AdvertisingIdReader
+import com.swmansion.detour.identifiers.DeviceIdentifiers
+import com.swmansion.detour.identifiers.DeviceIdentifiersReporter
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.identity.userIdRejection
+import com.swmansion.detour.models.AdvertisingId
 import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.models.LinkProcessingMode
 import com.swmansion.detour.models.LinkResult
@@ -50,6 +60,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -105,6 +116,9 @@ object Detour {
     private lateinit var installReferrerHelper: InstallReferrerHelper
     private lateinit var metaInstallReferrerReader: MetaInstallReferrerReader
     private lateinit var lateMetaReferrerSender: LateMetaReferrerSender
+    private lateinit var advertisingIdReader: AdvertisingIdReader
+    private lateinit var deviceIdentifiersReporter: DeviceIdentifiersReporter
+    private lateinit var requestContext: RequestContextProvider
     private lateinit var installStore: InstallStore
     private lateinit var userIdStore: UserIdStore
     private lateinit var sdkApiClient: SdkApiClient
@@ -168,6 +182,7 @@ object Detour {
         }
         DetourAnalytics.start()
         started.complete(Unit)
+        syncDeviceIdentifiers()
     }
 
     /**
@@ -186,6 +201,35 @@ object Detour {
     private fun consentInputsChanged() {
         DetourAnalytics.reevaluateWaiting()
         consentInputs.update { it + 1 }
+        syncDeviceIdentifiers()
+    }
+
+    private fun syncDeviceIdentifiers() {
+        if (isInitialized) scope.launch { deviceIdentifiersReporter.sync() }
+    }
+
+    // The advertising ID is only for postbacks to ad networks, so it needs that purpose, not attribution.
+    private suspend fun deviceIdentifiers(sdkPackage: String): DeviceIdentifiers {
+        if (sdkPackage != "mmp" || decideNow(DetourPurpose.AD_NETWORK_SHARING) != GateDecision.SEND) {
+            return DeviceIdentifiers.NONE
+        }
+        // The read binds to Google Play services and can take long; it runs outside the caller,
+        // so the caller stops waiting at the limit.
+        val reading = scope.async { advertisingIdReader.read() }
+        return DeviceIdentifiers(withTimeoutOrNull(AdvertisingIdReader.TIMEOUT_MS) { reading.await() }?.let(::AdvertisingId))
+    }
+
+    // After the first match, so the server has the install to attach them to; only as mmp,
+    // because the server keeps nothing from core.
+    private suspend fun canSendDeviceIdentifiers(): Boolean =
+        config.attribution != null && started.isCompleted && isEnabled() &&
+            deferredMatch?.result?.isActive != true && !installStore.isFirstLaunch() &&
+            requestSdkPackage(config) == "mmp"
+
+    private fun deviceIdentifiersBody(fields: JsonObject): JsonObject {
+        val body = HttpClient.gson.toJsonTree(requestContext.current().toMap()).asJsonObject
+        for ((name, value) in fields.entrySet()) body.add(name, value)
+        return body
     }
 
     // Once per launch, so a value changed on the server reaches the app on its next launch.
@@ -325,7 +369,7 @@ object Detour {
         DetourEndpoints.reportBaseUrl(config)
         this.storage = config.storage ?: DefaultStorageProvider(context.applicationContext)
         this.consentStore = ConsentStore(storage)
-        val requestContext = RequestContextProvider(
+        this.requestContext = RequestContextProvider(
             context.applicationContext,
             sessionId = { DetourAnalytics.sessionManager.currentSessionId },
             consentSnapshot = { consentStore.passedThisLaunch?.toWire() },
@@ -353,6 +397,21 @@ object Detour {
             attributionDecision = { decideNow(DetourPurpose.ATTRIBUTION) },
             send = sdkApiClient::sendLateMetaReferrer,
         )
+        this.advertisingIdReader = AdvertisingIdReader(context.applicationContext)
+        this.deviceIdentifiersReporter = DeviceIdentifiersReporter(
+            storage,
+            canSend = ::canSendDeviceIdentifiers,
+            current = { deviceIdentifiers(requestSdkPackage(config)) },
+            deviceId = { installStore.getDeviceId() },
+            send = { fields -> sdkApiClient.sendDeviceIdentifiers(deviceIdentifiersBody(fields)) },
+        )
+        // Also after the user changed the ads settings: the app comes back to the foreground.
+        // ProcessLifecycleOwner must be observed from the main thread.
+        Handler(Looper.getMainLooper()).post {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) = syncDeviceIdentifiers()
+            })
+        }
         // A referrer kept on an earlier launch goes once the gate decides: the app passes its
         // consent again after configure.
         scope.launch {
@@ -581,16 +640,26 @@ object Detour {
         )
     }
 
-    // One decision for the header and the Meta referrer: the referrer never goes out as core.
-    private suspend fun attributionFields(deviceId: String, matchEnded: Deferred<Unit>): Pair<String, MetaInstallReferrer?> {
+    private class AttributionFields(
+        val sdkPackage: String,
+        val metaReferrer: MetaInstallReferrer? = null,
+        val advertisingId: AdvertisingId? = null,
+    )
+
+    // One decision for the header and the fields: none of them goes out as core.
+    private suspend fun attributionFields(deviceId: String, matchEnded: Deferred<Unit>): AttributionFields {
         val sdkPackage = requestSdkPackage(config)
+        if (sdkPackage != "mmp") return AttributionFields(sdkPackage)
+        val identifiers = scope.async { deviceIdentifiers(sdkPackage) }
         val facebookAppId = config.attribution?.facebookAppId?.takeIf { it.isNotBlank() }
-        if (sdkPackage != "mmp" || facebookAppId == null) return sdkPackage to null
-        return sdkPackage to metaInstallReferrerReader.read(facebookAppId) { late ->
-            lateMetaReferrerSender.keep(deviceId, late)
-            matchEnded.await()
-            lateMetaReferrerSender.sendKept()
+        val metaReferrer = facebookAppId?.let {
+            metaInstallReferrerReader.read(it) { late ->
+                lateMetaReferrerSender.keep(deviceId, late)
+                matchEnded.await()
+                lateMetaReferrerSender.sendKept()
+            }
         }
+        return AttributionFields(sdkPackage, metaReferrer, identifiers.await().advertisingId)
     }
 
     /**
@@ -601,7 +670,9 @@ object Detour {
     // same result. A result is delivered once, so a later call in the session gets NotFirstLaunch.
     private suspend fun processDeferredLink(report: ReadyForUIReport): LinkResult {
         val match = synchronized(this) {
-            deferredMatch ?: DeferredMatch(scope.async { matchDeferredLink() }).also { deferredMatch = it }
+            deferredMatch ?: DeferredMatch(
+                scope.async { matchDeferredLink() }.also { it.invokeOnCompletion { syncDeviceIdentifiers() } }
+            ).also { deferredMatch = it }
         }
         if (match.isDelivered.get()) {
             Log.d(TAG, "Session already handled")
@@ -662,8 +733,11 @@ object Detour {
                 apiClient.matchLink(DirectMatchRequest(clickId), withContext = false)
             } else if (clickId != null && isDirectMatch) {
                 Log.d(TAG, "Using direct matching with click_id")
-                val (sdkPackage, metaReferrer) = attribution.await()
-                apiClient.matchLink(DirectMatchRequest(clickId, deviceId, userId, referrer, metaReferrer), sdkPackage = sdkPackage)
+                val fields = attribution.await()
+                apiClient.matchLink(
+                    DirectMatchRequest(clickId, deviceId, userId, referrer, fields.metaReferrer, fields.advertisingId),
+                    sdkPackage = fields.sdkPackage,
+                )
             } else {
                 if (clickId == null) {
                     Log.d(TAG, "The click_id not found, using signal-based matching")
@@ -672,15 +746,16 @@ object Detour {
                 }
                 // Collected before the fields are awaited, so both run at once.
                 val signals = signalCollector.collectSignals()
-                val (sdkPackage, metaReferrer) = attribution.await()
+                val fields = attribution.await()
                 apiClient.matchLink(
                     signals.copy(
                         deviceId = deviceId,
                         userId = userId,
                         installReferrer = referrer,
-                        metaInstallReferrer = metaReferrer,
+                        metaInstallReferrer = fields.metaReferrer,
+                        advertisingId = fields.advertisingId,
                     ),
-                    sdkPackage = sdkPackage,
+                    sdkPackage = fields.sdkPackage,
                 )
             }
         } finally {

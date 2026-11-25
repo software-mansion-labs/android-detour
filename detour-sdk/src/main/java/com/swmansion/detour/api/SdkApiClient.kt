@@ -2,6 +2,8 @@ package com.swmansion.detour.api
 
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
 import com.swmansion.detour.DetourConfig
 import com.swmansion.detour.consent.DetourConsent
 import com.swmansion.detour.consent.KillSwitchReporter.Outcome
@@ -97,17 +99,41 @@ internal class SdkApiClient(private val config: DetourConfig) {
         }
     }
 
+    /** `true` once the server answered for good: stored, unchanged or rejected. `false` to try again later. */
+    suspend fun sendDeviceIdentifiers(body: JsonObject): Boolean {
+        // Sent with `mmp` only: the server keeps nothing from core.
+        val status = postJson(DetourEndpoint.SDK_DEVICE_IDENTIFIERS, nullKeepingGson.toJson(body), sdkPackage = "mmp")
+            ?: return false
+        return when {
+            status in 200..299 -> true
+            isRetryable(status) -> false
+            else -> {
+                // The server will not take this state, so it waits until the state changes. A 404 too:
+                // this is sent only after the first match, so an install the server lacks will not come.
+                Log.w(TAG, "[Detour:ATTRIBUTION] sdk/device-identifiers rejected: $status")
+                true
+            }
+        }
+    }
+
     /** The response status, or null when no response arrived. */
     private suspend fun post(
         endpoint: DetourEndpoint,
         body: Map<String, Any>,
         client: OkHttpClient = HttpClient.okHttp,
+    ): Int? = postJson(endpoint, HttpClient.gson.toJson(body), client)
+
+    private suspend fun postJson(
+        endpoint: DetourEndpoint,
+        json: String,
+        client: OkHttpClient = HttpClient.okHttp,
+        sdkPackage: String? = null,
     ): Int? = withContext(Dispatchers.IO) {
         val url = DetourEndpoints.url(endpoint, config) ?: return@withContext null
         val request = Request.Builder()
             .url(url)
-            .post(HttpClient.gson.toJson(body).toRequestBody(HttpClient.JSON))
-            .detourHeaders(config)
+            .post(json.toRequestBody(HttpClient.JSON))
+            .detourHeaders(config, sdkPackage)
             .build()
         try {
             client.newCall(request).execute().use { it.code }
@@ -119,6 +145,9 @@ internal class SdkApiClient(private val config: DetourConfig) {
 
     companion object {
         private const val TAG = "SdkApiClient"
+
+        // A null in sdk/device-identifiers clears an identifier sent before, so it must not be left out.
+        private val nullKeepingGson = GsonBuilder().serializeNulls().create()
 
         /** A failure the same request can succeed after, later. */
         private fun isRetryable(status: Int) = status == 429 || status >= 500

@@ -52,6 +52,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.installreferrer)
+    // Added by the app: the library brings the AD_ID permission, so it is not forced on every app.
+    compileOnly(libs.play.services.ads.identifier)
+    testImplementation(libs.play.services.ads.identifier)
 
     testImplementation(libs.junit)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
