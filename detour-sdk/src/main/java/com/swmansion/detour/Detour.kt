@@ -220,8 +220,8 @@ object Detour {
     // ID is only for postbacks to ad networks, so it needs that purpose too.
     private suspend fun deviceIdentifiers(sdkPackage: String): DeviceIdentifiers {
         if (sdkPackage != "mmp") return DeviceIdentifiers.NONE
-        val readsAdvertisingId = config.attribution?.isChildDirected != true &&
-            decideNow(DetourPurpose.AD_NETWORK_SHARING) == GateDecision.SEND
+        if (config.attribution?.isChildDirected == true) return DeviceIdentifiers.NONE
+        val readsAdvertisingId = decideNow(DetourPurpose.AD_NETWORK_SHARING) == GateDecision.SEND
         val readsAppSetId = config.attribution?.readsAppSetId == true &&
             sdkConfigStore.current().isOn(READ_APP_SET_ID_FLAG)
         // Both reads bind to Google Play services and can take long; they run outside the caller,

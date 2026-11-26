@@ -419,7 +419,7 @@ dependencies {
 }
 ```
 
-Declare Device or other IDs (Analytics, Fraud prevention) in the Play Console Data safety form. To keep it on the device in any case, pass `DetourAttributionConfig(readsAppSetId = false)`; do that in an app for children (COPPA, Google Play Families).
+Declare Device or other IDs (Analytics, Fraud prevention) in the Play Console Data safety form. To keep it on the device in any case, pass `DetourAttributionConfig(readsAppSetId = false)`; `isChildDirected = true` turns it off too.
 
 </details>
 
