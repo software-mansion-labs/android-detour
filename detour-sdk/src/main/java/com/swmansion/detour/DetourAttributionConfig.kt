@@ -11,7 +11,10 @@ package com.swmansion.detour
  * carries the Meta Install Referrer read from the Facebook, Instagram or Facebook Lite app, so
  * installs from Meta ads can be attributed. Your manifest also needs the `<queries>` entries from
  * the README. `null` reads nothing.
+ * @property isChildDirected `true` for an app for children (COPPA, Google Play Families): the SDK
+ * then reads no device identifier.
  */
 class DetourAttributionConfig @JvmOverloads constructor(
     val facebookAppId: String? = null,
+    val isChildDirected: Boolean = false,
 )

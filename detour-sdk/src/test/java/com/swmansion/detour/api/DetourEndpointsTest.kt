@@ -49,6 +49,7 @@ class DetourEndpointsTest {
             DetourEndpoint.SDK_CONSENT to "https://godetour.dev/api/sdk/consent",
             DetourEndpoint.SDK_DISABLE to "https://godetour.dev/api/sdk/disable",
             DetourEndpoint.SDK_META_INSTALL_REFERRER to "https://godetour.dev/api/sdk/meta-install-referrer",
+            DetourEndpoint.SDK_DEVICE_IDENTIFIERS to "https://godetour.dev/api/sdk/device-identifiers",
         )
         assertEquals(DetourEndpoint.entries.toSet(), expected.keys)
 
@@ -153,6 +154,7 @@ class ApiClientsBaseUrlTest {
         SdkApiClient(config).sendConsent(DetourConsent(mapOf(DetourPurpose.ANALYTICS to true)), null, "device", null)
         SdkApiClient(config).sendKillSwitch(enabled = false, atMs = 0, deviceId = "device")
         SdkApiClient(config).sendLateMetaReferrer("device", MetaInstallReferrer("encrypted", true, 0, "facebook"))
+        SdkApiClient(config).sendDeviceIdentifiers(com.google.gson.JsonObject().apply { addProperty("device_id", "device") })
         listOf(
             AnalyticsRequest.Event("test", null, 0),
             AnalyticsRequest.Retention("app_open", 0),
