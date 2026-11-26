@@ -7,6 +7,7 @@ import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import com.swmansion.detour.api.HttpClient
 import com.swmansion.detour.models.AdvertisingId
+import com.swmansion.detour.models.AppSetId
 import com.swmansion.detour.storage.DetourStorage
 import com.swmansion.detour.storage.StorageKeys
 import kotlinx.coroutines.CancellationException
@@ -15,11 +16,15 @@ import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 
 /** The identifiers the SDK may send now, after the consent gate and the reader's own checks. */
-internal data class DeviceIdentifiers(val advertisingId: AdvertisingId? = null) {
+internal data class DeviceIdentifiers(
+    val advertisingId: AdvertisingId? = null,
+    val appSetId: AppSetId? = null,
+) {
 
     /** Each identifier the SDK has, as its JSON value, by request field name. */
     fun encodedFields(): Map<String, String> = buildMap {
         advertisingId?.let { put("advertising_id", HttpClient.gson.toJson(it)) }
+        appSetId?.let { put("app_set_id", HttpClient.gson.toJson(it)) }
     }
 
     companion object {

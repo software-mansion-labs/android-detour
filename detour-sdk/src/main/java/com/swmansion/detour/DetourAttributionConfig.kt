@@ -13,8 +13,11 @@ package com.swmansion.detour
  * the README. `null` reads nothing.
  * @property isChildDirected `true` for an app for children (COPPA, Google Play Families): the SDK
  * then reads no device identifier.
+ * @property readsAppSetId `false` keeps the App Set ID on the device, also when the Detour server
+ * turns it on.
  */
 class DetourAttributionConfig @JvmOverloads constructor(
     val facebookAppId: String? = null,
     val isChildDirected: Boolean = false,
+    val readsAppSetId: Boolean = true,
 )

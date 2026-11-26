@@ -28,7 +28,11 @@ internal enum class ConsentGateDefault {
 internal data class SdkConfig(
     val schemaVersion: Int,
     val consentGateDefaults: Map<String, ConsentGateDefault>,
+    val featureFlags: Map<String, Boolean> = emptyMap(),
 ) {
+    /** A flag the config does not list is off. */
+    fun isOn(flag: String): Boolean = featureFlags[flag] == true
+
     /** A purpose the config does not list waits for consent. */
     fun gateDefault(purpose: String): ConsentGateDefault =
         consentGateDefaults[purpose] ?: ConsentGateDefault.CLOSED
@@ -36,6 +40,7 @@ internal data class SdkConfig(
     private class Response(
         @SerializedName("schema_version") val schemaVersion: Int?,
         @SerializedName("consent_gate_default") val consentGateDefault: Map<String, String>?,
+        @SerializedName("feature_flags") val featureFlags: Map<String, Any?>?,
     )
 
     companion object {
@@ -57,6 +62,9 @@ internal data class SdkConfig(
                 schemaVersion = schemaVersion,
                 consentGateDefaults = gates.mapNotNull { (purpose, value) ->
                     ConsentGateDefault.fromWire(value)?.let { purpose to it }
+                }.toMap(),
+                featureFlags = response.featureFlags.orEmpty().mapNotNull { (flag, value) ->
+                    (value as? Boolean)?.let { flag to it }
                 }.toMap(),
             )
         }
