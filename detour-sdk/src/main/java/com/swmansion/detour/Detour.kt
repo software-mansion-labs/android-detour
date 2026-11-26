@@ -668,7 +668,7 @@ object Detour {
     // matchLink returns only after a 2xx or a 404 and throws otherwise; both save the install, so
     // the server has the identifiers the body carried.
     private suspend fun markSentWithMatch(fields: AttributionFields, deviceId: String) =
-        deviceIdentifiersReporter.markSent(DeviceIdentifiers(fields.advertisingId), deviceId)
+        deviceIdentifiersReporter.markSent(DeviceIdentifiers(fields.advertisingId, fields.appSetId), deviceId)
 
     // One decision for the header and the fields: none of them goes out as core.
     private suspend fun attributionFields(deviceId: String, matchEnded: Deferred<Unit>): AttributionFields {
