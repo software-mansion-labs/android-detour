@@ -2,7 +2,10 @@ package com.swmansion.detour.identifiers
 
 import com.google.gson.JsonObject
 import com.swmansion.detour.api.HttpClient
+import com.google.android.gms.appset.AppSetIdInfo
+import com.swmansion.detour.consent.SdkConfig
 import com.swmansion.detour.models.AdvertisingId
+import com.swmansion.detour.models.AppSetId
 import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.test.InMemoryStorage
 import kotlinx.coroutines.test.runTest
@@ -110,5 +113,24 @@ class DeviceIdentifiersReporterTest {
 
         val with = HttpClient.gson.toJsonTree(DirectMatchRequest("c_1", advertisingId = aaid)).asJsonObject
         assertEquals(aaid.id, with.getAsJsonObject("advertising_id")["id"].asString)
+    }
+
+    @Test
+    fun `the App Set ID goes with its scope`() {
+        val appSetId = AppSetId("9b4c1f0e-2d3a-4e5f-8a7b-6c5d4e3f2a1b", AppSetIdReader.scopeName(AppSetIdInfo.SCOPE_DEVELOPER))
+        val fields = DeviceIdentifiersReporter.changes(DeviceIdentifiers(appSetId = appSetId).encodedFields(), emptyMap()).first
+        assertEquals("developer", fields.getAsJsonObject("app_set_id")["scope"].asString)
+        assertEquals("app", AppSetIdReader.scopeName(AppSetIdInfo.SCOPE_APP))
+
+        val match = HttpClient.gson.toJsonTree(DirectMatchRequest("c_1", appSetId = appSetId)).asJsonObject
+        assertEquals(appSetId.id, match.getAsJsonObject("app_set_id")["id"].asString)
+    }
+
+    @Test
+    fun `feature flags are read and a missing or odd one is off`() {
+        val config = SdkConfig.fromJson("""{"schema_version":1,"consent_gate_default":{},"feature_flags":{"read_app_set_id":true,"other":"yes"}}""")!!
+        assertTrue(config.isOn("read_app_set_id"))
+        assertTrue(!config.isOn("other"))
+        assertTrue(!SdkConfig.fromJson("""{"schema_version":1,"consent_gate_default":{}}""")!!.isOn("read_app_set_id"))
     }
 }

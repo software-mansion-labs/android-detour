@@ -27,11 +27,13 @@ import com.swmansion.detour.consent.DetourPurpose
 import com.swmansion.detour.consent.KillSwitchReporter
 import com.swmansion.detour.consent.SdkConfigStore
 import com.swmansion.detour.identifiers.AdvertisingIdReader
+import com.swmansion.detour.identifiers.AppSetIdReader
 import com.swmansion.detour.identifiers.DeviceIdentifiers
 import com.swmansion.detour.identifiers.DeviceIdentifiersReporter
 import com.swmansion.detour.identity.UserIdStore
 import com.swmansion.detour.identity.userIdRejection
 import com.swmansion.detour.models.AdvertisingId
+import com.swmansion.detour.models.AppSetId
 import com.swmansion.detour.models.DirectMatchRequest
 import com.swmansion.detour.models.LinkProcessingMode
 import com.swmansion.detour.models.LinkResult
@@ -55,6 +57,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -117,6 +120,7 @@ object Detour {
     private lateinit var metaInstallReferrerReader: MetaInstallReferrerReader
     private lateinit var lateMetaReferrerSender: LateMetaReferrerSender
     private lateinit var advertisingIdReader: AdvertisingIdReader
+    private lateinit var appSetIdReader: AppSetIdReader
     private lateinit var deviceIdentifiersReporter: DeviceIdentifiersReporter
     private lateinit var requestContext: RequestContextProvider
     private lateinit var installStore: InstallStore
@@ -208,18 +212,28 @@ object Detour {
         if (isInitialized) scope.launch { deviceIdentifiersReporter.sync() }
     }
 
-    // The advertising ID is only for postbacks to ad networks, so it needs that purpose, not attribution.
+    // PROVISIONAL: the App Set ID is read only with consent and a server flag until the legal
+    // answer on whether it may be read by default; the answer changes the flag, not the SDK.
+    private const val READ_APP_SET_ID_FLAG = "read_app_set_id"
+
+    // An mmp request already has consent to attribution, which the App Set ID needs. The advertising
+    // ID is only for postbacks to ad networks, so it needs that purpose too.
     private suspend fun deviceIdentifiers(sdkPackage: String): DeviceIdentifiers {
-        if (sdkPackage != "mmp" || config.attribution?.isChildDirected == true ||
-            decideNow(DetourPurpose.AD_NETWORK_SHARING) != GateDecision.SEND
-        ) {
-            return DeviceIdentifiers.NONE
-        }
-        // The read binds to Google Play services and can take long; it runs outside the caller,
+        if (sdkPackage != "mmp") return DeviceIdentifiers.NONE
+        if (config.attribution?.isChildDirected == true) return DeviceIdentifiers.NONE
+        val readsAdvertisingId = decideNow(DetourPurpose.AD_NETWORK_SHARING) == GateDecision.SEND
+        val readsAppSetId = config.attribution?.readsAppSetId == true &&
+            sdkConfigStore.current().isOn(READ_APP_SET_ID_FLAG)
+        // Both reads bind to Google Play services and can take long; they run outside the caller,
         // so the caller stops waiting at the limit.
-        val reading = scope.async { advertisingIdReader.read() }
-        return DeviceIdentifiers(withTimeoutOrNull(AdvertisingIdReader.TIMEOUT_MS) { reading.await() }?.let(::AdvertisingId))
+        val advertisingId = scope.async { if (readsAdvertisingId) advertisingIdReader.read() else null }
+        val appSetId = scope.async { if (readsAppSetId) appSetIdReader.read() else null }
+        // Each read that ended within the limit goes; a slow one does not drop the other.
+        withTimeoutOrNull(AdvertisingIdReader.TIMEOUT_MS) { joinAll(advertisingId, appSetId) }
+        return DeviceIdentifiers(advertisingId.readyOrNull()?.let(::AdvertisingId), appSetId.readyOrNull())
     }
+
+    private suspend fun <T> Deferred<T?>.readyOrNull(): T? = if (isCompleted) await() else null
 
     private suspend fun canSendDeviceIdentifiers(): Boolean =
         config.attribution != null && isEnabled() && DeviceIdentifiersReporter.canSend(
@@ -401,6 +415,7 @@ object Detour {
             send = sdkApiClient::sendLateMetaReferrer,
         )
         this.advertisingIdReader = AdvertisingIdReader(context.applicationContext)
+        this.appSetIdReader = AppSetIdReader(context.applicationContext)
         this.deviceIdentifiersReporter = DeviceIdentifiersReporter(
             storage,
             canSend = ::canSendDeviceIdentifiers,
@@ -647,12 +662,13 @@ object Detour {
         val sdkPackage: String,
         val metaReferrer: MetaInstallReferrer? = null,
         val advertisingId: AdvertisingId? = null,
+        val appSetId: AppSetId? = null,
     )
 
     // matchLink returns only after a 2xx or a 404 and throws otherwise; both save the install, so
     // the server has the identifiers the body carried.
     private suspend fun markSentWithMatch(fields: AttributionFields, deviceId: String) =
-        deviceIdentifiersReporter.markSent(DeviceIdentifiers(fields.advertisingId), deviceId)
+        deviceIdentifiersReporter.markSent(DeviceIdentifiers(fields.advertisingId, fields.appSetId), deviceId)
 
     // One decision for the header and the fields: none of them goes out as core.
     private suspend fun attributionFields(deviceId: String, matchEnded: Deferred<Unit>): AttributionFields {
@@ -667,7 +683,8 @@ object Detour {
                 lateMetaReferrerSender.sendKept()
             }
         }
-        return AttributionFields(sdkPackage, metaReferrer, identifiers.await().advertisingId)
+        val read = identifiers.await()
+        return AttributionFields(sdkPackage, metaReferrer, read.advertisingId, read.appSetId)
     }
 
     /**
@@ -743,7 +760,9 @@ object Detour {
                 Log.d(TAG, "Using direct matching with click_id")
                 val fields = attribution.await()
                 apiClient.matchLink(
-                    DirectMatchRequest(clickId, deviceId, userId, referrer, fields.metaReferrer, fields.advertisingId),
+                    DirectMatchRequest(
+                        clickId, deviceId, userId, referrer, fields.metaReferrer, fields.advertisingId, fields.appSetId,
+                    ),
                     sdkPackage = fields.sdkPackage,
                 ).also { markSentWithMatch(fields, deviceId) }
             } else {
@@ -762,6 +781,7 @@ object Detour {
                         installReferrer = referrer,
                         metaInstallReferrer = fields.metaReferrer,
                         advertisingId = fields.advertisingId,
+                        appSetId = fields.appSetId,
                     ),
                     sdkPackage = fields.sdkPackage,
                 ).also { markSentWithMatch(fields, deviceId) }
