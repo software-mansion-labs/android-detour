@@ -6,6 +6,7 @@ import com.google.android.gms.appset.AppSet
 import com.google.android.gms.appset.AppSetIdInfo
 import com.google.android.gms.tasks.Tasks
 import com.swmansion.detour.models.AppSetId
+import java.util.concurrent.TimeUnit
 
 /**
  * Reads the App Set ID with `play-services-appset`, a library the app adds itself, so an app
@@ -17,7 +18,8 @@ internal class AppSetIdReader(private val context: Context) {
     fun read(): AppSetId? {
         if (!isLibraryPresent) return null
         return try {
-            val info = Tasks.await(AppSet.getClient(context).appSetIdInfo)
+            // With a limit: a Play services that never answers would block an IO thread for good.
+            val info = Tasks.await(AppSet.getClient(context).appSetIdInfo, AdvertisingIdReader.TIMEOUT_MS, TimeUnit.MILLISECONDS)
             info.id.takeIf { it.isNotBlank() }?.let { AppSetId(it.lowercase(), scopeName(info.scope)) }
         } catch (e: Exception) {
             Log.w(TAG, "[Detour:ATTRIBUTION] App Set ID unavailable", e)
