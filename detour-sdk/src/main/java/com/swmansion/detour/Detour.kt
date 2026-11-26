@@ -648,6 +648,11 @@ object Detour {
         val advertisingId: AdvertisingId? = null,
     )
 
+    // matchLink returns only after a 2xx or a 404 and throws otherwise; both save the install, so
+    // the server has the identifiers the body carried.
+    private suspend fun markSentWithMatch(fields: AttributionFields, deviceId: String) =
+        deviceIdentifiersReporter.markSent(DeviceIdentifiers(fields.advertisingId), deviceId)
+
     // One decision for the header and the fields: none of them goes out as core.
     private suspend fun attributionFields(deviceId: String, matchEnded: Deferred<Unit>): AttributionFields {
         val sdkPackage = requestSdkPackage(config)
@@ -739,7 +744,7 @@ object Detour {
                 apiClient.matchLink(
                     DirectMatchRequest(clickId, deviceId, userId, referrer, fields.metaReferrer, fields.advertisingId),
                     sdkPackage = fields.sdkPackage,
-                )
+                ).also { markSentWithMatch(fields, deviceId) }
             } else {
                 if (clickId == null) {
                     Log.d(TAG, "The click_id not found, using signal-based matching")
@@ -758,7 +763,7 @@ object Detour {
                         advertisingId = fields.advertisingId,
                     ),
                     sdkPackage = fields.sdkPackage,
-                )
+                ).also { markSentWithMatch(fields, deviceId) }
             }
         } finally {
             matchEnded.complete(Unit)

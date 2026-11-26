@@ -53,6 +53,27 @@ class DeviceIdentifiersReporterTest {
     }
 
     @Test
+    fun `what the first match carried is not sent again`() = runTest {
+        val bodies = mutableListOf<JsonObject>()
+        var current = DeviceIdentifiers(aaid)
+        val reporter = DeviceIdentifiersReporter(
+            InMemoryStorage(),
+            canSend = { true },
+            current = { current },
+            deviceId = { "device" },
+            send = { bodies += it; true },
+        )
+
+        reporter.markSent(current, "device")
+        reporter.sync()
+        assertTrue(bodies.isEmpty())
+
+        current = DeviceIdentifiers.NONE
+        reporter.sync()
+        assertTrue(bodies.single()["advertising_id"].isJsonNull)
+    }
+
+    @Test
     fun `nothing goes out before the reporter may send`() = runTest {
         val bodies = mutableListOf<JsonObject>()
         DeviceIdentifiersReporter(

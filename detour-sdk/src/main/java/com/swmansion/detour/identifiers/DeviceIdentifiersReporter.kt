@@ -67,6 +67,23 @@ internal class DeviceIdentifiersReporter(
         }
     }
 
+    /**
+     * Called once the server answered the first match: the identifiers it carried are on the
+     * server, so the next sync does not send them again.
+     */
+    suspend fun markSent(identifiers: DeviceIdentifiers, deviceId: String) = mutex.withLock {
+        val hashes = changes(identifiers.encodedFields(), emptyMap()).second
+        if (hashes.isEmpty()) return@withLock
+        try {
+            val merged = loadSent(deviceId) + hashes
+            storage.setItem(StorageKeys.SENT_DEVICE_IDENTIFIERS, HttpClient.gson.toJson(Sent(deviceId, merged)))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "[Detour:ATTRIBUTION] Failed to note the identifiers sent with the match", e)
+        }
+    }
+
     private suspend fun loadSent(deviceId: String): Map<String, String> {
         val raw = storage.getItem(StorageKeys.SENT_DEVICE_IDENTIFIERS)?.takeIf { it.isNotEmpty() } ?: return emptyMap()
         val sent = runCatching { HttpClient.gson.fromJson(raw, Sent::class.java) }.getOrNull()
