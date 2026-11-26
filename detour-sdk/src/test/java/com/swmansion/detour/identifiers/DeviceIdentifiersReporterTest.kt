@@ -74,6 +74,15 @@ class DeviceIdentifiersReporterTest {
     }
 
     @Test
+    fun `identifiers go only after the first match and as mmp`() {
+        assertTrue(DeviceIdentifiersReporter.canSend(isStarted = true, isMatchInFlight = false, isFirstLaunch = false, sdkPackage = "mmp"))
+        assertTrue(!DeviceIdentifiersReporter.canSend(isStarted = false, isMatchInFlight = false, isFirstLaunch = false, sdkPackage = "mmp"))
+        assertTrue(!DeviceIdentifiersReporter.canSend(isStarted = true, isMatchInFlight = true, isFirstLaunch = false, sdkPackage = "mmp"))
+        assertTrue(!DeviceIdentifiersReporter.canSend(isStarted = true, isMatchInFlight = false, isFirstLaunch = true, sdkPackage = "mmp"))
+        assertTrue(!DeviceIdentifiersReporter.canSend(isStarted = true, isMatchInFlight = false, isFirstLaunch = false, sdkPackage = "core"))
+    }
+
+    @Test
     fun `nothing goes out before the reporter may send`() = runTest {
         val bodies = mutableListOf<JsonObject>()
         DeviceIdentifiersReporter(

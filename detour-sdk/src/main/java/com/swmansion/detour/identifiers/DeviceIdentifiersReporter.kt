@@ -93,6 +93,11 @@ internal class DeviceIdentifiersReporter(
     companion object {
         private const val TAG = "Detour"
 
+        // After the first match, so the server has the install to attach them to; only as mmp,
+        // because the server keeps nothing from core.
+        internal fun canSend(isStarted: Boolean, isMatchInFlight: Boolean, isFirstLaunch: Boolean, sdkPackage: String) =
+            isStarted && !isMatchInFlight && !isFirstLaunch && sdkPackage == "mmp"
+
         /**
          * The fields to send (a value, or JSON null to clear one sent before) and the hashes to
          * store once the server answered.

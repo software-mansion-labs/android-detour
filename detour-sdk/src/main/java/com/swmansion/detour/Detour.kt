@@ -221,12 +221,13 @@ object Detour {
         return DeviceIdentifiers(withTimeoutOrNull(AdvertisingIdReader.TIMEOUT_MS) { reading.await() }?.let(::AdvertisingId))
     }
 
-    // After the first match, so the server has the install to attach them to; only as mmp,
-    // because the server keeps nothing from core.
     private suspend fun canSendDeviceIdentifiers(): Boolean =
-        config.attribution != null && started.isCompleted && isEnabled() &&
-            deferredMatch?.result?.isActive != true && !installStore.isFirstLaunch() &&
-            requestSdkPackage(config) == "mmp"
+        config.attribution != null && isEnabled() && DeviceIdentifiersReporter.canSend(
+            isStarted = started.isCompleted,
+            isMatchInFlight = deferredMatch?.result?.isActive == true,
+            isFirstLaunch = installStore.isFirstLaunch(),
+            sdkPackage = requestSdkPackage(config),
+        )
 
     private fun deviceIdentifiersBody(fields: JsonObject): JsonObject {
         val body = HttpClient.gson.toJsonTree(requestContext.current().toMap()).asJsonObject
