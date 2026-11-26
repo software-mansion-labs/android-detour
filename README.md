@@ -409,7 +409,7 @@ dependencies {
 }
 ```
 
-With it, and with consent to `DetourPurpose.AD_NETWORK_SHARING`, the SDK sends the AAID, so the ad network can match the install and later conversions to the user it showed the ad to. It is not sent after the user opted out of ads personalization in the system settings, and the SDK tells the Detour backend to forget it when the user opts out later or withdraws consent. The library adds the `com.google.android.gms.permission.AD_ID` permission to your app; declare the Device or other IDs data type in the Play Console Data safety form. Without the library the SDK reads nothing and your app gets no new permission.
+With it, and with consent to `DetourPurpose.AD_NETWORK_SHARING`, the SDK sends the AAID, so the ad network can match the install and later conversions to the user it showed the ad to. It is not sent after the user opted out of ads personalization in the system settings, and the SDK tells the Detour backend to forget it when the user opts out later or withdraws consent. The library adds the `com.google.android.gms.permission.AD_ID` permission to your app; declare the Device or other IDs data type in the Play Console Data safety form. Without the library the SDK reads nothing and your app gets no new permission. In an app for children (COPPA, Google Play Families) pass `DetourAttributionConfig(isChildDirected = true)`: the SDK then reads no device identifier.
 
 </details>
 

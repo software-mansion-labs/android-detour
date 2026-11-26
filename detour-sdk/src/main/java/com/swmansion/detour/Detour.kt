@@ -210,7 +210,9 @@ object Detour {
 
     // The advertising ID is only for postbacks to ad networks, so it needs that purpose, not attribution.
     private suspend fun deviceIdentifiers(sdkPackage: String): DeviceIdentifiers {
-        if (sdkPackage != "mmp" || decideNow(DetourPurpose.AD_NETWORK_SHARING) != GateDecision.SEND) {
+        if (sdkPackage != "mmp" || config.attribution?.isChildDirected == true ||
+            decideNow(DetourPurpose.AD_NETWORK_SHARING) != GateDecision.SEND
+        ) {
             return DeviceIdentifiers.NONE
         }
         // The read binds to Google Play services and can take long; it runs outside the caller,
